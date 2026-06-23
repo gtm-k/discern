@@ -44,6 +44,17 @@ export function isScrapedTier(tier) {
 const isRecord = (o) => !!o && typeof o === "object" && !Array.isArray(o);
 
 /**
+ * Coerce an interpolated leaf to a safe display string. Primitives render as text; anything else
+ * (object/array/null/undefined) renders as the fallback — never a leaked "[object Object]"/"undefined".
+ */
+const safeStr = (v, fallback = "⚠ unavailable") => {
+  const t = typeof v;
+  if (t === "string") return v;
+  if (t === "number" || t === "boolean") return String(v);
+  return fallback;
+};
+
+/**
  * Returns a violation string when a single offer's confidence/provenance is miscalibrated, else null
  * (docs/definitions.md §7). The OFFER analog of decision.mjs::claimConfidenceViolation:
  *   - offer_confidence missing / non-numeric / out of [0,1];
@@ -118,16 +129,16 @@ function renderGrid(rec, lines) {
     if (row.recalled) flags.push("RECALLED — disqualified");
     if (row.joinMissing) flags.push("identity join failed");
     lines.push(
-      `${i + 1}. ${row.product}${row.maker ? ` by ${row.maker}` : ""} — fundamentals ${row.fundamentals_score} · ` +
-      `independent clusters ${row.recurrence_over_clusters}${flags.length ? ` · ${flags.join(" · ")}` : ""}`,
+      `${i + 1}. ${safeStr(row.product, "<unknown>")}${row.maker ? ` by ${safeStr(row.maker)}` : ""} — fundamentals ${safeStr(row.fundamentals_score)} · ` +
+      `independent clusters ${safeStr(row.recurrence_over_clusters)}${flags.length ? ` · ${flags.join(" · ")}` : ""}`,
     );
     for (const ev of candByProduct.get(row.product)?.evidence ?? []) {
       if (!isRecord(ev)) { lines.push(`   - ⚠ malformed evidence omitted`); continue; }
-      lines.push(`   - "${ev.claim ?? "<no claim>"}" — ${conf(ev.claim_confidence)}`);
+      lines.push(`   - "${safeStr(ev.claim, "<no claim>")}" — ${conf(ev.claim_confidence)}`);
     }
     for (const ce of shortByProduct.get(row.product)?.counterevidence ?? []) {
       if (!isRecord(ce)) { lines.push(`   - ⚠ malformed counterevidence omitted`); continue; }
-      lines.push(`   - counterevidence (${ce.kind}): ${ce.detail}${ce.source ? ` [${ce.source}]` : ""}`);
+      lines.push(`   - counterevidence (${safeStr(ce.kind, "unspecified")}): ${safeStr(ce.detail, "unspecified")}${ce.source ? ` [${safeStr(ce.source)}]` : ""}`);
     }
   });
   if (dropped) lines.push(`⚠ ${dropped} malformed candidate record(s) omitted`);
@@ -155,15 +166,15 @@ function renderOffers(rec, lines, recommendFamily) {
     const violation = offerConfidenceViolation(o); // renderer runs the SAME check the gate uses.
     const priceStr = Number.isFinite(o.price) ? `${o.price}${o.currency ? ` ${o.currency}` : ""}` : "price unavailable";
     const parts = [
-      `${o.merchant ?? "<unknown merchant>"} — ${priceStr}`,
-      `provenance: ${o.provenance_tier ?? "unknown"}`,
+      `${safeStr(o.merchant, "<unknown merchant>")} — ${priceStr}`,
+      `provenance: ${safeStr(o.provenance_tier, "unknown")}`,
       // An uncalibrated offer never shows a trusted band — it shows WHY it can't be trusted.
       violation ? `⚠ uncalibrated (${violation})` : `confidence: ${conf(o.offer_confidence)}`,
     ];
-    if (o.timestamp) parts.push(`as of ${o.timestamp}`);
-    if (o.region) parts.push(`region: ${o.region}`);
-    if (o.returns) parts.push(`returns: ${o.returns}`);
-    if (o.warranty) parts.push(`warranty: ${o.warranty}`);
+    if (o.timestamp) parts.push(`as of ${safeStr(o.timestamp)}`);
+    if (o.region) parts.push(`region: ${safeStr(o.region)}`);
+    if (o.returns) parts.push(`returns: ${safeStr(o.returns)}`);
+    if (o.warranty) parts.push(`warranty: ${safeStr(o.warranty)}`);
     // User-observability defense: warn on any scraped tier even if the data flag is (wrongly) unset.
     if (o.verify_at_checkout === true || isScrapedTier(o.provenance_tier)) parts.push("⚠ verify at checkout");
     lines.push(`- ${parts.join(" · ")}`);
@@ -179,20 +190,20 @@ function renderOffers(rec, lines, recommendFamily) {
 export function renderReport(rec) {
   if (!rec || typeof rec !== "object")
     return "# Discern recommendation\n\n⚠ No recommendation object to render.";
+  const lines = ["# Discern recommendation", ""];
+
+  // Backstop: the targeted guards below handle every known malformed shape gracefully, but the renderer's
+  // contract is to NEVER throw to the (user-facing) caller. The whole body — header through the final
+  // join — is wrapped, so any residual throw degrades to the partial report built so far plus a note.
+  try {
   const recommendFamily = rec.outcome === "RECOMMEND" || rec.outcome === "RECOMMEND_WITH_CAVEATS";
-  const lines = [];
-  lines.push("# Discern recommendation", "");
-  const head = [`**Outcome:** ${rec.outcome ?? "(missing outcome)"}`];
-  if (rec.reason_code && rec.reason_code !== "NONE") head.push(`**Reason:** ${rec.reason_code}`);
+  const head = [`**Outcome:** ${safeStr(rec.outcome, "(missing outcome)")}`];
+  if (rec.reason_code && rec.reason_code !== "NONE") head.push(`**Reason:** ${safeStr(rec.reason_code)}`);
   head.push(`**Overall confidence:** ${conf(rec.confidence_overall)}`);
   lines.push(head.join("  ·  "), "");
 
-  // Backstop: targeted guards above handle every known malformed shape gracefully, but the renderer's
-  // contract is to NEVER crash the whole report. Any residual throw degrades to the partial report built
-  // so far plus a visible note — an exception is never propagated to the (user-facing) caller.
-  try {
   if (rec.framed_requirements?.need) {
-    lines.push("## Need", rec.framed_requirements.need);
+    lines.push("## Need", safeStr(rec.framed_requirements.need));
     const b = renderBudget(rec.framed_requirements);
     if (b) lines.push(b);
     lines.push("");
@@ -201,18 +212,18 @@ export function renderReport(rec) {
   // A pick is presented ONLY for a RECOMMEND-family outcome with a well-formed pick (a real product) —
   // never under INSUFFICIENT_EVIDENCE, and never a stray/garbled pick rendered as "## Pick — undefined".
   if (recommendFamily && isRecord(rec.pick) && rec.pick.product) {
-    lines.push(`## Pick — ${rec.pick.product}${rec.pick.maker ? ` by ${rec.pick.maker}` : ""}`);
-    if (rec.rationale) lines.push(rec.rationale);
+    lines.push(`## Pick — ${safeStr(rec.pick.product)}${rec.pick.maker ? ` by ${safeStr(rec.pick.maker)}` : ""}`);
+    if (rec.rationale) lines.push(safeStr(rec.rationale));
     if (rec.value_assessment?.summary)
-      lines.push(`**Value:** ${rec.value_assessment.summary}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${rec.value_assessment.value_per_dollar})` : ""}`);
+      lines.push(`**Value:** ${safeStr(rec.value_assessment.summary)}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${safeStr(rec.value_assessment.value_per_dollar)})` : ""}`);
     lines.push("");
   } else {
     lines.push("## No single pick");
     if (recommendFamily) {
       lines.push("No single pick is presented — the top candidates are tied or none could be resolved; see the grid.");
     } else {
-      const reason = rec.reason_code && rec.reason_code !== "NONE" ? rec.reason_code : "unspecified (reason_code missing)";
-      lines.push(`Outcome is ${rec.outcome ?? "unknown"} — ${reason}. No pick is presented.`);
+      const reason = rec.reason_code && rec.reason_code !== "NONE" ? safeStr(rec.reason_code) : "unspecified (reason_code missing)";
+      lines.push(`Outcome is ${safeStr(rec.outcome, "unknown")} — ${reason}. No pick is presented.`);
     }
     lines.push("");
   }
@@ -224,16 +235,16 @@ export function renderReport(rec) {
     lines.push("## Runners-up");
     for (const r of rec.runners_up) {
       if (!isRecord(r)) { lines.push("- ⚠ malformed runner-up omitted"); continue; }
-      lines.push(`- ${r.product ?? "<unknown>"}${r.maker ? ` by ${r.maker}` : ""}`);
+      lines.push(`- ${safeStr(r.product, "<unknown>")}${r.maker ? ` by ${safeStr(r.maker)}` : ""}`);
     }
     lines.push("");
   }
 
   renderOffers(rec, lines, recommendFamily);
 
-  if (rec.caveats?.length) {
+  if (Array.isArray(rec.caveats) && rec.caveats.length) {
     lines.push("## Caveats");
-    for (const c of rec.caveats) lines.push(`- ${c}`);
+    for (const c of rec.caveats) lines.push(`- ${safeStr(c)}`);
     lines.push("");
   }
 
@@ -245,9 +256,8 @@ export function renderReport(rec) {
   lines.push(`Tiers unavailable: ${orNone(su.tiers_unavailable)}`);
   lines.push(`Budgets hit: ${orNone(su.budgets_hit)}`);
   lines.push(`Fetches used: ${typeof su.fetches_used === "number" ? su.fetches_used : "n/a"}`);
-  } catch {
-    lines.push("", "⚠ Part of this report could not be rendered (malformed data).");
-  }
-
   return lines.join("\n");
+  } catch {
+    return lines.join("\n") + "\n\n⚠ Part of this report could not be rendered (malformed data).";
+  }
 }

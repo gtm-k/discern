@@ -434,6 +434,37 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `renderReport threw on non-array search_universe field`);
 }
 
+// --- Phase 4 review hardening ROUND 5 (wrong-typed leaf leaks + complete backstop) ------------------
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  // Wrong-typed leaf fields (reachable via JSON: object where a string is expected) must not leak
+  // "[object Object]"/"undefined" as if real data — they render as a visible gap instead.
+  const objNeed = structuredClone(base); objNeed.framed_requirements.need = { en: "x" };
+  expect("render r5: object need not leaked", !/\[object Object\]/.test(renderReport(objNeed)), `[object Object] leaked for need`);
+
+  const objRationale = structuredClone(base); objRationale.rationale = { t: "x" };
+  expect("render r5: object rationale not leaked", !/\[object Object\]/.test(renderReport(objRationale)), `leaked rationale`);
+
+  const objCaveat = structuredClone(base); objCaveat.caveats = [{}, "a real caveat"];
+  expect("render r5: object caveat not leaked", !/\[object Object\]/.test(renderReport(objCaveat)), `leaked caveat`);
+
+  const badCe = structuredClone(base); badCe.shortlist[0].counterevidence = [{}]; // record missing kind/detail
+  expect("render r5: counterevidence missing fields not raw-undefined",
+    !/counterevidence \(undefined\): undefined/.test(renderReport(badCe)), `raw undefined counterevidence`);
+
+  const objSummary = structuredClone(base); objSummary.value_assessment.summary = {};
+  expect("render r5: object value summary not leaked", !/\*\*Value:\*\* \[object Object\]/.test(renderReport(objSummary)), `leaked summary`);
+
+  // Backstop completeness: a throwing accessor ANYWHERE (incl. the header) must not propagate —
+  // renderReport always returns a string (the partial report + a visible note), never throws.
+  const evil = structuredClone(base);
+  Object.defineProperty(evil, "outcome", { get() { throw new Error("boom"); }, enumerable: true });
+  let threw = false, out = "";
+  try { out = renderReport(evil); } catch { threw = true; }
+  expect("render r5: throwing accessor does not propagate", !threw && out.length > 0, `renderReport threw on hostile getter`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
