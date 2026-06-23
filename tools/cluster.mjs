@@ -23,11 +23,16 @@ export function clusterSources(sources) {
     else seen.set(key, i);
   };
   // Canonicalize signals so case/whitespace variants of the same owner/network/citation still collapse.
+  // A value that is empty AFTER normalization (e.g. whitespace-only) is not a real signal and must NOT
+  // link sources — otherwise blank owners would all merge into one bogus cluster.
   const norm = (v) => String(v).trim().toLowerCase();
   sources.forEach((s, i) => {
-    if (s.owner) link(i, "owner:" + norm(s.owner));
-    if (s.affiliate_network) link(i, "aff:" + norm(s.affiliate_network));
-    if (s.upstream_citation) link(i, "up:" + norm(s.upstream_citation));
+    const owner = norm(s.owner ?? "");
+    const aff = norm(s.affiliate_network ?? "");
+    const up = norm(s.upstream_citation ?? "");
+    if (owner) link(i, "owner:" + owner);
+    if (aff) link(i, "aff:" + aff);
+    if (up) link(i, "up:" + up);
   });
 
   const rootToId = new Map();
