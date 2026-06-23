@@ -351,6 +351,53 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render r2: null price shown as unavailable", /price unavailable/i.test(bpr), `missing price-unavailable note`);
 }
 
+// --- Phase 4 review hardening ROUND 3 (ensemble round 3: element-level crash, NaN/stray leaks, buy
+//     section under INSUFFICIENT, array-element bypass) --------------------------------------------
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  // NEW-1: a malformed ELEMENT inside candidates[]/shortlist[] must not crash the report.
+  const gridMutations = [
+    (r) => { r.candidates = [null]; delete r.shortlist; },
+    (r) => { r.candidates = [structuredClone(base.candidates[0]), null]; },
+    (r) => { r.shortlist = [null, structuredClone(base.shortlist[0])]; },
+  ];
+  for (let i = 0; i < gridMutations.length; i++) {
+    const r = structuredClone(base); gridMutations[i](r);
+    let threw = false, out = "";
+    try { out = renderReport(r); } catch { threw = true; }
+    expect(`render r3: malformed grid element #${i} does not crash`, !threw && out.length > 0,
+      `renderReport threw on malformed candidate/shortlist element`);
+  }
+
+  // NEW-2: a NaN price must not leak the literal "NaN" to the user. (Merchant name avoids "NaN" itself.)
+  const nanPrice = structuredClone(base);
+  nanPrice.offers = [{ merchant: "GlitchShop", price: NaN, currency: "USD", provenance_tier: "api",
+    timestamp: "2026-06-22", offer_confidence: 0.9, verify_at_checkout: false }];
+  const nanLine = renderReport(nanPrice).split("\n").find((l) => l.includes("GlitchShop")) ?? "";
+  expect("render r3: NaN price does not leak", !/NaN/.test(nanLine) && /price unavailable/.test(nanLine),
+    `NaN price leaked: ${nanLine}`);
+
+  // NEW-3: a stray non-object pick must NOT render "## Pick — undefined".
+  for (const p of ["Sony", {}, 42]) {
+    const r = structuredClone(base); r.pick = p;
+    expect(`render r3: stray pick (${JSON.stringify(p)}) not shown as pick`, !renderReport(r).includes("## Pick — undefined"),
+      `rendered "## Pick — undefined" for ${JSON.stringify(p)}`);
+  }
+
+  // NEW-4: an INSUFFICIENT_EVIDENCE outcome must NOT render a "where to buy" buy section.
+  const insufOffers = structuredClone(base);
+  insufOffers.outcome = "INSUFFICIENT_EVIDENCE"; insufOffers.reason_code = "THIN_EVIDENCE";
+  expect("render r3: no buy section under INSUFFICIENT_EVIDENCE", !/where to buy/i.test(renderReport(insufOffers)),
+    `buy section rendered under INSUFFICIENT_EVIDENCE`);
+
+  // NEW-5: an array element in offers must not leak as a record — it is flagged malformed.
+  const arrEl = structuredClone(base);
+  arrEl.offers = [[], structuredClone(base.offers[0])];
+  expect("render r3: array offer element flagged malformed", /malformed offer/i.test(renderReport(arrEl)),
+    `array offer element not flagged malformed`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

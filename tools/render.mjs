@@ -40,6 +40,9 @@ export function isScrapedTier(tier) {
   return tier !== "api";
 }
 
+/** A valid record element: a plain object, not null and not an array. Used to filter untrusted input. */
+const isRecord = (o) => !!o && typeof o === "object" && !Array.isArray(o);
+
 /**
  * Returns a violation string when a single offer's confidence/provenance is miscalibrated, else null
  * (docs/definitions.md §7). The OFFER analog of decision.mjs::claimConfidenceViolation:
@@ -92,12 +95,16 @@ function renderBudget(req) {
 
 /** Ranked grid rows joined back to their candidate (evidence) and shortlist item (counterevidence). */
 function renderGrid(rec, lines) {
-  // Coerce sibling arrays so a malformed (non-array) candidates/shortlist degrades to an empty grid
-  // instead of throwing and blanking the whole report.
-  const candidates = Array.isArray(rec.candidates) ? rec.candidates : [];
-  const shortlist = Array.isArray(rec.shortlist) ? rec.shortlist : [];
+  // Filter to well-formed records so a malformed (non-array, or null/array element) candidates/shortlist
+  // degrades to an empty/partial grid instead of throwing and blanking the whole report. Any dropped
+  // element is surfaced (observable), never silently swallowed.
+  const candRaw = Array.isArray(rec.candidates) ? rec.candidates : [];
+  const shortRaw = Array.isArray(rec.shortlist) ? rec.shortlist : [];
+  const candidates = candRaw.filter(isRecord);
+  const shortlist = shortRaw.filter(isRecord);
+  const dropped = (candRaw.length - candidates.length) + (shortRaw.length - shortlist.length);
   const ranked = rankCandidates(rankingModel({ ...rec, candidates, shortlist }));
-  if (!ranked.length) return;
+  if (!ranked.length && !dropped) return;
   const candByProduct = new Map(candidates.map((c) => [c.product, c]));
   const shortByProduct = new Map(shortlist.map((s) => [s.product, s]));
   lines.push("## The grid (ranked by fundamentals, then independent recurrence)");
@@ -114,25 +121,32 @@ function renderGrid(rec, lines) {
     for (const ce of shortByProduct.get(row.product)?.counterevidence ?? [])
       lines.push(`   - counterevidence (${ce.kind}): ${ce.detail}${ce.source ? ` [${ce.source}]` : ""}`);
   });
+  if (dropped) lines.push(`⚠ ${dropped} malformed candidate record(s) omitted`);
   lines.push("");
 }
 
 function renderOffers(rec, lines, recommendFamily) {
   const offers = Array.isArray(rec.offers) ? rec.offers : [];
+  // Never surface a "where to buy" buy signal under a non-recommend outcome. If offers were nonetheless
+  // present on such an object, say so (observable) rather than directing a purchase.
+  if (!recommendFamily) {
+    if (offers.length)
+      lines.push("## Offers", `${offers.length} offer(s) seen during search withheld — outcome is ${rec.outcome ?? "unknown"}, no recommendation made.`, "");
+    return;
+  }
   if (!offers.length) {
     // A recommend-family outcome with no sourced offers is a visible gap, not a silent omission —
     // including a tie (no single pick), where the absence of sourcing is itself load-bearing.
-    if (recommendFamily)
-      lines.push("## Offers (where to buy)", "No offers sourced — see Search universe below.", "");
+    lines.push("## Offers (where to buy)", "No offers sourced — see Search universe below.", "");
     return;
   }
   lines.push("## Offers (where to buy)");
   for (const o of offers) {
-    if (!o || typeof o !== "object") { lines.push("- ⚠ malformed offer omitted"); continue; } // never deref a bad element
+    if (!isRecord(o)) { lines.push("- ⚠ malformed offer omitted"); continue; } // never deref a bad element
     const violation = offerConfidenceViolation(o); // renderer runs the SAME check the gate uses.
-    const priceStr = typeof o.price === "number" ? `${o.price}${o.currency ? ` ${o.currency}` : ""}` : "price unavailable";
+    const priceStr = Number.isFinite(o.price) ? `${o.price}${o.currency ? ` ${o.currency}` : ""}` : "price unavailable";
     const parts = [
-      `${o.merchant} — ${priceStr}`,
+      `${o.merchant ?? "<unknown merchant>"} — ${priceStr}`,
       `provenance: ${o.provenance_tier ?? "unknown"}`,
       // An uncalibrated offer never shows a trusted band — it shows WHY it can't be trusted.
       violation ? `⚠ uncalibrated (${violation})` : `confidence: ${conf(o.offer_confidence)}`,
@@ -171,9 +185,9 @@ export function renderReport(rec) {
     lines.push("");
   }
 
-  // A pick is presented ONLY for a RECOMMEND-family outcome with an actual pick — never under
-  // INSUFFICIENT_EVIDENCE (a stray pick on such an object must not be shown as the recommendation).
-  if (recommendFamily && rec.pick) {
+  // A pick is presented ONLY for a RECOMMEND-family outcome with a well-formed pick (a real product) —
+  // never under INSUFFICIENT_EVIDENCE, and never a stray/garbled pick rendered as "## Pick — undefined".
+  if (recommendFamily && isRecord(rec.pick) && rec.pick.product) {
     lines.push(`## Pick — ${rec.pick.product}${rec.pick.maker ? ` by ${rec.pick.maker}` : ""}`);
     if (rec.rationale) lines.push(rec.rationale);
     if (rec.value_assessment?.summary)
@@ -182,7 +196,7 @@ export function renderReport(rec) {
   } else {
     lines.push("## No single pick");
     if (recommendFamily) {
-      lines.push("Top candidates are tied — presented as a judgment call (see the grid), not a single pick.");
+      lines.push("No single pick is presented — the top candidates are tied or none could be resolved; see the grid.");
     } else {
       const reason = rec.reason_code && rec.reason_code !== "NONE" ? rec.reason_code : "unspecified (reason_code missing)";
       lines.push(`Outcome is ${rec.outcome ?? "unknown"} — ${reason}. No pick is presented.`);
@@ -196,8 +210,8 @@ export function renderReport(rec) {
   if (recommendFamily && Array.isArray(rec.runners_up) && rec.runners_up.length) {
     lines.push("## Runners-up");
     for (const r of rec.runners_up) {
-      if (!r || typeof r !== "object") { lines.push("- ⚠ malformed runner-up omitted"); continue; }
-      lines.push(`- ${r.product}${r.maker ? ` by ${r.maker}` : ""}`);
+      if (!isRecord(r)) { lines.push("- ⚠ malformed runner-up omitted"); continue; }
+      lines.push(`- ${r.product ?? "<unknown>"}${r.maker ? ` by ${r.maker}` : ""}`);
     }
     lines.push("");
   }
