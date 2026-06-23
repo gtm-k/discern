@@ -28,7 +28,7 @@ const KNOWN_TIERS = new Set(["search", "fetch", "browser", "api"]); // schema of
  * "unknown" — never silently rendered as if it were high.
  */
 export function confidenceBand(x) {
-  if (typeof x !== "number" || Number.isNaN(x)) return "unknown";
+  if (typeof x !== "number" || !Number.isFinite(x)) return "unknown"; // NaN and ±Infinity are never a band.
   if (x >= HIGH_BAND) return "high";
   if (x >= 0.5) return "moderate";
   if (x >= 0.2) return "low";
@@ -79,7 +79,7 @@ export function offerViolations(rec) {
 // --- Rendering -------------------------------------------------------------------------------------
 
 const conf = (x) => `${confidenceBand(x)} (${typeof x === "number" ? x.toFixed(2) : "n/a"})`;
-const orNone = (arr) => (arr && arr.length ? arr.join(", ") : "none");
+const orNone = (arr) => (Array.isArray(arr) && arr.length ? arr.join(", ") : "none");
 
 function renderBudget(req) {
   const b = req?.budget;
@@ -101,7 +101,12 @@ function renderGrid(rec, lines) {
   const candRaw = Array.isArray(rec.candidates) ? rec.candidates : [];
   const shortRaw = Array.isArray(rec.shortlist) ? rec.shortlist : [];
   const candidates = candRaw.filter(isRecord);
-  const shortlist = shortRaw.filter(isRecord);
+  // Also sanitize each shortlist item's nested counterevidence to a record array, so rankingModel's
+  // recall scan (decision.mjs) can't choke on a null/non-array element deep in the structure.
+  const shortlist = shortRaw.filter(isRecord).map((s) => ({
+    ...s,
+    counterevidence: (Array.isArray(s.counterevidence) ? s.counterevidence : []).filter(isRecord),
+  }));
   const dropped = (candRaw.length - candidates.length) + (shortRaw.length - shortlist.length);
   const ranked = rankCandidates(rankingModel({ ...rec, candidates, shortlist }));
   if (!ranked.length && !dropped) return;
@@ -116,10 +121,14 @@ function renderGrid(rec, lines) {
       `${i + 1}. ${row.product}${row.maker ? ` by ${row.maker}` : ""} — fundamentals ${row.fundamentals_score} · ` +
       `independent clusters ${row.recurrence_over_clusters}${flags.length ? ` · ${flags.join(" · ")}` : ""}`,
     );
-    for (const ev of candByProduct.get(row.product)?.evidence ?? [])
-      lines.push(`   - "${ev.claim}" — ${conf(ev.claim_confidence)}`);
-    for (const ce of shortByProduct.get(row.product)?.counterevidence ?? [])
+    for (const ev of candByProduct.get(row.product)?.evidence ?? []) {
+      if (!isRecord(ev)) { lines.push(`   - ⚠ malformed evidence omitted`); continue; }
+      lines.push(`   - "${ev.claim ?? "<no claim>"}" — ${conf(ev.claim_confidence)}`);
+    }
+    for (const ce of shortByProduct.get(row.product)?.counterevidence ?? []) {
+      if (!isRecord(ce)) { lines.push(`   - ⚠ malformed counterevidence omitted`); continue; }
       lines.push(`   - counterevidence (${ce.kind}): ${ce.detail}${ce.source ? ` [${ce.source}]` : ""}`);
+    }
   });
   if (dropped) lines.push(`⚠ ${dropped} malformed candidate record(s) omitted`);
   lines.push("");
@@ -178,6 +187,10 @@ export function renderReport(rec) {
   head.push(`**Overall confidence:** ${conf(rec.confidence_overall)}`);
   lines.push(head.join("  ·  "), "");
 
+  // Backstop: targeted guards above handle every known malformed shape gracefully, but the renderer's
+  // contract is to NEVER crash the whole report. Any residual throw degrades to the partial report built
+  // so far plus a visible note — an exception is never propagated to the (user-facing) caller.
+  try {
   if (rec.framed_requirements?.need) {
     lines.push("## Need", rec.framed_requirements.need);
     const b = renderBudget(rec.framed_requirements);
@@ -232,6 +245,9 @@ export function renderReport(rec) {
   lines.push(`Tiers unavailable: ${orNone(su.tiers_unavailable)}`);
   lines.push(`Budgets hit: ${orNone(su.budgets_hit)}`);
   lines.push(`Fetches used: ${typeof su.fetches_used === "number" ? su.fetches_used : "n/a"}`);
+  } catch {
+    lines.push("", "⚠ Part of this report could not be rendered (malformed data).");
+  }
 
   return lines.join("\n");
 }

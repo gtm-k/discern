@@ -398,6 +398,42 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `array offer element not flagged malformed`);
 }
 
+// --- Phase 4 review hardening ROUND 4 (nested malformed elements + non-finite confidence + backstop) -
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  // R4-4: confidenceBand must treat non-finite as "unknown", never "high".
+  expect("render r4: confidenceBand(Infinity) is unknown", confidenceBand(Infinity) === "unknown",
+    `got ${confidenceBand(Infinity)}`);
+  const infConf = structuredClone(base); infConf.confidence_overall = Infinity;
+  expect("render r4: Infinity overall confidence not shown as high", !/high \(Infinity\)/.test(renderReport(infConf)),
+    `Infinity confidence shown as high`);
+
+  // R4-1/R4-3: a null element inside a candidate's evidence[] must not crash; the gap is surfaced.
+  const badEv = structuredClone(base);
+  badEv.candidates[0].evidence = [null, structuredClone(base.candidates[0].evidence[0])];
+  let te = false, er = "";
+  try { er = renderReport(badEv); } catch { te = true; }
+  expect("render r4: malformed evidence does not crash", !te && er.length > 0, `renderReport threw on malformed evidence`);
+  expect("render r4: malformed evidence surfaced", /malformed evidence/i.test(er), `missing malformed-evidence note`);
+
+  // R4-2: a null element / non-array in a shortlist item's counterevidence[] must not crash.
+  for (const ce of [[null], "oops", 42]) {
+    const r = structuredClone(base); r.shortlist[0].counterevidence = ce;
+    let t = false, o = "";
+    try { o = renderReport(r); } catch { t = true; }
+    expect(`render r4: malformed counterevidence (${JSON.stringify(ce)}) does not crash`, !t && o.length > 0,
+      `renderReport threw on counterevidence ${JSON.stringify(ce)}`);
+  }
+
+  // A non-array search_universe field must not crash the report (orNone guard).
+  const badSU = structuredClone(base); badSU.search_universe.queries_run = "oops";
+  let ts = false, sr = "";
+  try { sr = renderReport(badSU); } catch { ts = true; }
+  expect("render r4: non-array search_universe field does not crash", !ts && sr.length > 0,
+    `renderReport threw on non-array search_universe field`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
