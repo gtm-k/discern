@@ -39,11 +39,15 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
 // --- Affiliate down-weighting (not zeroed) ---------------------------------------------------------
 {
   const fx = load("evals/affiliate-downweight.json");
-  const indep = fx.sources.find((s) => !s.affiliate_or_sponsored);
-  const aff = fx.sources.find((s) => s.affiliate_or_sponsored);
+  const indep = fx.sources.find((s) => !s.affiliate_or_sponsored_flag);
+  const aff = fx.sources.find((s) => s.affiliate_or_sponsored_flag);
   const wi = sourceWeight(indep), wa = sourceWeight(aff);
-  expect("affiliate-downweight: independent > affiliate", wi > wa, `independent ${wi} !> affiliate ${wa}`);
-  expect("affiliate-downweight: affiliate > 0", wa > 0, `affiliate weight ${wa} must be > 0 (down-weight, not exclude)`);
+  expect("affiliate-downweight: independent > affiliate",
+    (wi > wa) === fx.expected.independent_weight_gt_affiliate,
+    `independent ${wi} vs affiliate ${wa}; expected independent_weight_gt_affiliate=${fx.expected.independent_weight_gt_affiliate}`);
+  expect("affiliate-downweight: affiliate > 0",
+    (wa > 0) === fx.expected.affiliate_weight_gt_zero,
+    `affiliate weight ${wa}; expected affiliate_weight_gt_zero=${fx.expected.affiliate_weight_gt_zero}`);
 }
 
 // --- Report ----------------------------------------------------------------------------------------

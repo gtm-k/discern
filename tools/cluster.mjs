@@ -22,10 +22,12 @@ export function clusterSources(sources) {
     if (seen.has(key)) union(i, seen.get(key));
     else seen.set(key, i);
   };
+  // Canonicalize signals so case/whitespace variants of the same owner/network/citation still collapse.
+  const norm = (v) => String(v).trim().toLowerCase();
   sources.forEach((s, i) => {
-    if (s.owner) link(i, "owner:" + s.owner);
-    if (s.affiliate_network) link(i, "aff:" + s.affiliate_network);
-    if (s.upstream_citation) link(i, "up:" + s.upstream_citation);
+    if (s.owner) link(i, "owner:" + norm(s.owner));
+    if (s.affiliate_network) link(i, "aff:" + norm(s.affiliate_network));
+    if (s.upstream_citation) link(i, "up:" + norm(s.upstream_citation));
   });
 
   const rootToId = new Map();
@@ -60,5 +62,6 @@ export function recurrenceByProduct(clustered) {
  * so it still counts but cannot dominate independent evidence.
  */
 export function sourceWeight(source) {
-  return source.affiliate_or_sponsored ? 0.5 : 1.0;
+  // Uses the Recommendation Object contract field (schema: evidence.affiliate_or_sponsored_flag).
+  return source.affiliate_or_sponsored_flag ? 0.5 : 1.0;
 }

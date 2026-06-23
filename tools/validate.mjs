@@ -29,6 +29,12 @@ function listFiles(dir, ext) {
     .map((d) => join(dir, d.name));
 }
 
+// Required directories must exist — a missing one would silently drop coverage.
+for (const d of ["schemas", "profiles", "evals/golden", "evals/expected", "evals/invalid"]) {
+  checks++;
+  if (!existsSync(join(root, d))) fail("setup", `required directory missing: ${d}`);
+}
+
 function jsonFromMarkdown(file) {
   const text = readFileSync(join(root, file), "utf8");
   const m = text.match(/```json\s*([\s\S]*?)```/);
@@ -83,7 +89,8 @@ for (const name of Object.keys(expected)) {
 }
 
 // --- Invalid fixtures: must be parseable JSON that the SCHEMA rejects (proves the gate bites) -------
-for (const f of listFiles("evals/invalid", ".json")) {
+const invalidFiles = listFiles("evals/invalid", ".json");
+for (const f of invalidFiles) {
   checks++;
   let obj;
   try {
@@ -94,6 +101,14 @@ for (const f of listFiles("evals/invalid", ".json")) {
   }
   if (validateRec(obj)) fail(f, `expected schema VIOLATION but it validated clean`);
 }
+
+// --- Coverage floor: fail loudly if a fixture set shrank (no silent coverage drop) ------------------
+checks++;
+if (profileFiles.length < 2) fail("coverage", `expected >=2 profile examples, found ${profileFiles.length}`);
+checks++;
+if (goldenFiles.length < 4) fail("coverage", `expected >=4 golden fixtures, found ${goldenFiles.length}`);
+checks++;
+if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, found ${invalidFiles.length}`);
 
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
