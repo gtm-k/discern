@@ -477,6 +477,11 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
 
   const objOfferCur = structuredClone(base); objOfferCur.offers[0].currency = {};
   expect("render r6: object offer.currency not leaked", !/\[object Object\]/.test(renderReport(objOfferCur)), `leaked offer.currency`);
+
+  // R7: wrong-typed ELEMENTS inside a search_universe list must not leak via the orNone join.
+  const objSU = structuredClone(base); objSU.search_universe.queries_run = [{}, "ok", null];
+  expect("render r7: search_universe array elements not leaked", !/\[object Object\]/.test(renderReport(objSU)),
+    `leaked search_universe element`);
 }
 
 // --- Report ----------------------------------------------------------------------------------------

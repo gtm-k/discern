@@ -90,7 +90,7 @@ export function offerViolations(rec) {
 // --- Rendering -------------------------------------------------------------------------------------
 
 const conf = (x) => `${confidenceBand(x)} (${typeof x === "number" ? x.toFixed(2) : "n/a"})`;
-const orNone = (arr) => (Array.isArray(arr) && arr.length ? arr.join(", ") : "none");
+const orNone = (arr) => (Array.isArray(arr) && arr.length ? arr.map((x) => safeStr(x)).join(", ") : "none");
 
 function renderBudget(req) {
   const b = req?.budget;
