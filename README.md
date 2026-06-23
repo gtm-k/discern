@@ -41,7 +41,7 @@ retailer APIs are *optional boosters* that improve breadth/speed where available
 | `docs/` | `triage.md`, `definitions.md`, `data-access.md` — the normative specs |
 | `tools/` | `validate.mjs` — schema + fixture validator (`npm test`) |
 | `evals/` | Offline golden fixtures (no live fetch) + deliberately-invalid cases |
-| `skills/discern/` | The skill itself (added in Phase 2) |
+| `skills/discern/` | `SKILL.md` — the buying method (the portable skill) |
 | `agents/` | Research subagent definitions (added in Phase 5) |
 
 Planning docs (vision, plan, pre-mortem, review audit trail) live privately in `gtm-k/prd/discern/`.
@@ -55,4 +55,5 @@ npm test    # validates all schemas + fixtures; non-zero exit on any violation
 
 ## Status
 
-Phase 1 (Foundations) — in progress. See `gtm-k/prd/discern/PLAN.md` for the phase ledger.
+Phase 1 (Foundations) complete. Phase 2 (Harvest + independence clustering + grid) in progress.
+See `gtm-k/prd/discern/PLAN.md` for the phase ledger.

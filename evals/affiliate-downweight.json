@@ -1,0 +1,8 @@
+{
+  "description": "Affiliate/sponsored evidence is down-weighted relative to an equivalent independent source, but never zeroed.",
+  "sources": [
+    { "id": "indep", "product": "WidgetA", "owner": "IndieReviewer", "affiliate_or_sponsored": false },
+    { "id": "aff",   "product": "WidgetA", "owner": "AffiliateBlog", "affiliate_or_sponsored": true }
+  ],
+  "expected": { "independent_weight_gt_affiliate": true, "affiliate_weight_gt_zero": true }
+}

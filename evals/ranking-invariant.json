@@ -1,0 +1,8 @@
+{
+  "description": "Ranking invariant R1: fundamentals outrank raw frequency. PopularButWeak has higher recurrence_over_clusters (5) but a weaker fundamentals_score (0.40); NicheButStrong has lower recurrence (2) but stronger fundamentals (0.85). NicheButStrong MUST win.",
+  "candidates": [
+    { "product": "PopularButWeak", "maker": "MakerP", "recurrence_over_clusters": 5, "fundamentals_score": 0.40 },
+    { "product": "NicheButStrong", "maker": "MakerN", "recurrence_over_clusters": 2, "fundamentals_score": 0.85 }
+  ],
+  "expected": { "winner": "NicheButStrong" }
+}

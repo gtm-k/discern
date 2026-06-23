@@ -1,0 +1,14 @@
+{
+  "description": "8 syndicated/affiliate listicles, each a different owner but all citing the SAME upstream ranking (and two sharing an affiliate network), all endorsing WidgetA. They must collapse to ONE cluster, so recurrence_over_clusters for WidgetA is 1, not 8.",
+  "sources": [
+    { "id": "s1", "product": "WidgetA", "owner": "BlogOne",   "upstream_citation": "UpstreamRankX" },
+    { "id": "s2", "product": "WidgetA", "owner": "BlogTwo",   "upstream_citation": "UpstreamRankX" },
+    { "id": "s3", "product": "WidgetA", "owner": "BlogThree", "upstream_citation": "UpstreamRankX", "affiliate_network": "AffNetY" },
+    { "id": "s4", "product": "WidgetA", "owner": "BlogFour",  "upstream_citation": "UpstreamRankX" },
+    { "id": "s5", "product": "WidgetA", "owner": "BlogFive",  "upstream_citation": "UpstreamRankX", "affiliate_network": "AffNetY" },
+    { "id": "s6", "product": "WidgetA", "owner": "BlogSix",   "upstream_citation": "UpstreamRankX" },
+    { "id": "s7", "product": "WidgetA", "owner": "BlogSeven", "upstream_citation": "UpstreamRankX" },
+    { "id": "s8", "product": "WidgetA", "owner": "BlogEight", "upstream_citation": "UpstreamRankX" }
+  ],
+  "expected": { "distinct_clusters": 1, "recurrence_WidgetA": 1 }
+}

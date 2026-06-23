@@ -5,7 +5,7 @@
   "description": "Discern — a cross-platform agentic-commerce skill that finds the genuinely-best product for a given person, modeled on a disciplined human buying method.",
   "type": "module",
   "scripts": {
-    "test": "node tools/validate.mjs"
+    "test": "node tools/validate.mjs && node tools/test-logic.mjs"
   },
   "license": "MIT",
   "devDependencies": {
