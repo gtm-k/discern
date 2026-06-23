@@ -155,7 +155,7 @@
         { "required": ["upc"] },
         { "required": ["ean"] },
         { "required": ["model_no"] },
-        { "required": ["unresolved"] }
+        { "required": ["unresolved", "unresolved_reason"], "properties": { "unresolved": { "const": true } } }
       ]
     },
     "candidate": {
