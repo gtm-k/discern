@@ -111,12 +111,16 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "owner", "access_tier"],
+      "required": ["url", "owner", "access_tier", "source_class"],
       "properties": {
         "url": { "type": "string" },
         "owner": { "type": "string", "description": "Publisher / site owner — used for independence clustering." },
         "date": { "type": "string", "description": "Publish or last-updated date if known." },
         "access_tier": { "enum": ["search", "fetch", "browser", "api"] },
+        "source_class": {
+          "enum": ["professional_review", "editorial_roundup", "video_review", "community_forum", "retailer_user_review", "spec_teardown_manufacturer"],
+          "description": "Which Harvest channel this came from (docs/definitions.md §1)."
+        },
         "extraction_method": { "type": "string" }
       }
     },
@@ -135,19 +139,29 @@
     },
     "durable_ids": {
       "type": "object",
+      "description": "A candidate must be identified durably (names are display-only). Provide at least one of gtin/upc/ean/model_no, OR set unresolved=true with a reason (which caps confidence — see definitions.md §3).",
       "additionalProperties": false,
       "properties": {
         "model_no": { "type": "string" },
         "gtin": { "type": "string" },
         "upc": { "type": "string" },
         "ean": { "type": "string" },
-        "variant": { "type": "string" }
-      }
+        "variant": { "type": "string" },
+        "unresolved": { "type": "boolean" },
+        "unresolved_reason": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["gtin"] },
+        { "required": ["upc"] },
+        { "required": ["ean"] },
+        { "required": ["model_no"] },
+        { "required": ["unresolved"] }
+      ]
     },
     "candidate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["product", "maker", "evidence", "recurrence_over_clusters"],
+      "required": ["product", "maker", "durable_ids", "evidence", "recurrence_over_clusters"],
       "properties": {
         "product": { "type": "string", "minLength": 1 },
         "maker": { "type": "string", "minLength": 1 },
@@ -206,9 +220,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["product", "maker"],
+      "description": "Pointer to a shortlisted/candidate product; authoritative identity lives on the matching candidate.durable_ids. Carry durable_ids here too when known.",
       "properties": {
         "product": { "type": "string", "minLength": 1 },
-        "maker": { "type": "string", "minLength": 1 }
+        "maker": { "type": "string", "minLength": 1 },
+        "durable_ids": { "$ref": "#/$defs/durable_ids" }
       }
     },
     "offer": {

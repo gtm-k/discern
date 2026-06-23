@@ -49,8 +49,10 @@ for (const f of profileFiles) {
   }
 }
 
-// --- Golden fixtures: must VALIDATE against the recommendation schema -------------------------------
-for (const f of listFiles("evals/golden", ".json")) {
+// --- Golden fixtures: must VALIDATE + match their expected-outcome manifest entry -------------------
+const expected = JSON.parse(readFileSync(join(root, "evals/expected/manifest.json"), "utf8"));
+const goldenFiles = listFiles("evals/golden", ".json");
+for (const f of goldenFiles) {
   checks++;
   let obj;
   try {
@@ -61,28 +63,34 @@ for (const f of listFiles("evals/golden", ".json")) {
   }
   if (!validateRec(obj)) fail(f, `recommendation schema: ${errs(validateRec)}`);
 
-  // Semantic assertions keyed off the fixture's intent (encoded in its filename).
+  // Every golden MUST have an explicit expected-outcome assertion in the manifest.
   const name = basename(f);
-  if (name.includes("safety")) {
-    if (obj.outcome !== "INSUFFICIENT_EVIDENCE")
-      fail(f, `safety case must be INSUFFICIENT_EVIDENCE, got ${obj.outcome}`);
-    if (obj.reason_code !== "UNSAFE_BRAND_PROXY")
-      fail(f, `safety case must have reason_code UNSAFE_BRAND_PROXY, got ${obj.reason_code}`);
-  }
-  if (name.includes("gift")) {
-    if (obj.beneficiary?.type !== "recipient")
-      fail(f, `gift case must have beneficiary.type=recipient`);
-  }
+  const exp = expected[name];
+  if (!exp) { fail(f, `no expected-outcome entry in evals/expected/manifest.json`); continue; }
+  if (obj.outcome !== exp.outcome) fail(f, `outcome ${obj.outcome} != expected ${exp.outcome}`);
+  if (exp.reason_code !== undefined && obj.reason_code !== exp.reason_code)
+    fail(f, `reason_code ${obj.reason_code} != expected ${exp.reason_code}`);
+  if (exp.pick !== undefined && obj.pick?.product !== exp.pick)
+    fail(f, `pick ${obj.pick?.product} != expected ${exp.pick}`);
+  if (exp.beneficiary_type !== undefined && obj.beneficiary?.type !== exp.beneficiary_type)
+    fail(f, `beneficiary.type ${obj.beneficiary?.type} != expected ${exp.beneficiary_type}`);
+}
+// Every manifest entry must correspond to a real golden fixture (no orphan expectations).
+for (const name of Object.keys(expected)) {
+  checks++;
+  if (!goldenFiles.some((f) => basename(f) === name))
+    fail("evals/expected/manifest.json", `entry '${name}' has no matching golden fixture`);
 }
 
-// --- Invalid fixtures: must FAIL the schema (proves the gate bites) ---------------------------------
+// --- Invalid fixtures: must be parseable JSON that the SCHEMA rejects (proves the gate bites) -------
 for (const f of listFiles("evals/invalid", ".json")) {
   checks++;
   let obj;
   try {
     obj = JSON.parse(readFileSync(join(root, f), "utf8"));
-  } catch {
-    continue; // a fixture that won't even parse is "invalid" as intended
+  } catch (e) {
+    fail(f, `invalid fixtures must be parseable JSON the schema rejects (not malformed JSON); parse error: ${e.message}`);
+    continue;
   }
   if (validateRec(obj)) fail(f, `expected schema VIOLATION but it validated clean`);
 }

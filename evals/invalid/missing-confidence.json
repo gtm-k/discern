@@ -6,11 +6,12 @@
     {
       "product": "P",
       "maker": "M",
+      "durable_ids": { "model_no": "P-1" },
       "evidence": [
         {
           "claim": "a claim with no confidence value",
           "source_cluster_id": "x",
-          "provenance": { "url": "https://example.com", "owner": "O", "access_tier": "fetch" },
+          "provenance": { "url": "https://example.com", "owner": "O", "access_tier": "fetch", "source_class": "professional_review" },
           "independence_flag": true,
           "affiliate_or_sponsored_flag": false
         }

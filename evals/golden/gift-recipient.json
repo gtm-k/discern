@@ -10,16 +10,18 @@
     {
       "product": "Cashmere-blend Wrap",
       "maker": "MakerWarm",
+      "durable_ids": { "unresolved": true, "unresolved_reason": "boutique item, no GTIN listed" },
       "evidence": [
-        { "claim": "Highly rated cozy wrap", "source_cluster_id": "g1", "provenance": { "url": "https://example.com/wrap", "owner": "OutletG", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.65 }
+        { "claim": "Highly rated cozy wrap", "source_cluster_id": "g1", "provenance": { "url": "https://example.com/wrap", "owner": "OutletG", "access_tier": "fetch", "source_class": "retailer_user_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.65 }
       ],
       "recurrence_over_clusters": 1
     },
     {
       "product": "Handmade Ceramic Pour-over Set",
       "maker": "MakerCraft",
+      "durable_ids": { "unresolved": true, "unresolved_reason": "handmade, one-off SKU; no GTIN" },
       "evidence": [
-        { "claim": "Handmade local pottery, recurring gift pick", "source_cluster_id": "g2", "provenance": { "url": "https://example.com/pourover", "owner": "OutletH", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.70 }
+        { "claim": "Handmade local pottery, recurring gift pick", "source_cluster_id": "g2", "provenance": { "url": "https://example.com/pourover", "owner": "OutletH", "access_tier": "fetch", "source_class": "editorial_roundup" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.70 }
       ],
       "recurrence_over_clusters": 2
     }
@@ -47,5 +49,5 @@
   "outcome": "RECOMMEND",
   "reason_code": "NONE",
   "confidence_overall": 0.70,
-  "caveats": ["Recipient taste inferred from profile; returnable in case of mismatch."]
+  "caveats": ["Recipient taste inferred from profile; returnable in case of mismatch.", "Both items have unresolved product identity (handmade/boutique)."]
 }

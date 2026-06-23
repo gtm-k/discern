@@ -6,8 +6,9 @@
     {
       "product": "BrandX Magnesium Glycinate",
       "maker": "BrandX",
+      "durable_ids": { "unresolved": true, "unresolved_reason": "multiple SKUs; GTIN not confirmed from independent source" },
       "evidence": [
-        { "claim": "Popular and heavily marketed", "source_cluster_id": "s1", "provenance": { "url": "https://example.com/brandx", "owner": "AffiliateNetA", "access_tier": "fetch" }, "independence_flag": false, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.30 }
+        { "claim": "Popular and heavily marketed", "source_cluster_id": "s1", "provenance": { "url": "https://example.com/brandx", "owner": "AffiliateNetA", "access_tier": "fetch", "source_class": "editorial_roundup" }, "independence_flag": false, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.30 }
       ],
       "recurrence_over_clusters": 1
     }

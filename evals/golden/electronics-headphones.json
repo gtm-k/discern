@@ -18,7 +18,7 @@
         {
           "claim": "Top-ranked ANC over-ear across multiple independent roundups",
           "source_cluster_id": "cluster-pro-a",
-          "provenance": { "url": "https://example.com/review-a", "owner": "ReviewOutletA", "date": "2026-01", "access_tier": "fetch", "extraction_method": "article" },
+          "provenance": { "url": "https://example.com/review-a", "owner": "ReviewOutletA", "date": "2026-01", "access_tier": "fetch", "source_class": "professional_review", "extraction_method": "article" },
           "independence_flag": true,
           "affiliate_or_sponsored_flag": false,
           "claim_confidence": 0.85
@@ -26,7 +26,7 @@
         {
           "claim": "Praised for ANC and comfort by community",
           "source_cluster_id": "cluster-forum-a",
-          "provenance": { "url": "https://example.com/forum", "owner": "ForumA", "access_tier": "fetch" },
+          "provenance": { "url": "https://example.com/forum", "owner": "ForumA", "access_tier": "fetch", "source_class": "community_forum" },
           "independence_flag": true,
           "affiliate_or_sponsored_flag": false,
           "claim_confidence": 0.70
@@ -42,7 +42,7 @@
         {
           "claim": "Strong ANC, slightly better comfort per some reviewers",
           "source_cluster_id": "cluster-pro-b",
-          "provenance": { "url": "https://example.com/review-b", "owner": "ReviewOutletB", "date": "2026-02", "access_tier": "fetch", "extraction_method": "article" },
+          "provenance": { "url": "https://example.com/review-b", "owner": "ReviewOutletB", "date": "2026-02", "access_tier": "fetch", "source_class": "professional_review", "extraction_method": "article" },
           "independence_flag": true,
           "affiliate_or_sponsored_flag": false,
           "claim_confidence": 0.80

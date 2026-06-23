@@ -1,0 +1,6 @@
+{
+  "electronics-headphones.json": { "outcome": "RECOMMEND", "reason_code": "NONE", "pick": "Sony WH-1000XM5" },
+  "clothing-natural-materials.json": { "outcome": "RECOMMEND_WITH_CAVEATS", "reason_code": "NONE", "pick": "Organic Cotton Oxford" },
+  "gift-recipient.json": { "outcome": "RECOMMEND", "reason_code": "NONE", "pick": "Handmade Ceramic Pour-over Set", "beneficiary_type": "recipient" },
+  "safety-supplement.json": { "outcome": "INSUFFICIENT_EVIDENCE", "reason_code": "UNSAFE_BRAND_PROXY" }
+}

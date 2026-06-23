@@ -5,16 +5,17 @@ this file, this file wins (or the change is made here first).
 
 ## 1. Source-classes (Harvest channels)
 
-Harvest deliberately spreads across distinct *classes* so one gamed channel can't dominate. The v1 classes:
+Harvest deliberately spreads across distinct *classes* so one gamed channel can't dominate. The v1 classes
+(the `provenance.source_class` enum keys, which the schema **requires** on every evidence item):
 
-1. **Professional reviews** — dedicated review outlets/publications.
-2. **Editorial "best of" roundups** — listicles/buyer's guides (treated with suspicion; see independence).
-3. **Video reviews** — YouTube and similar (hands-on, teardown-style preferred).
-4. **Community/forums** — Reddit, specialist forums, Q&A.
-5. **Retailer user-reviews** — ratings/reviews on storefronts (volume + recency + dissent).
-6. **Spec / teardown / manufacturer** — datasheets, iFixit-style teardowns, maker documentation.
+1. **Professional reviews** (`professional_review`) — dedicated review outlets/publications.
+2. **Editorial "best of" roundups** (`editorial_roundup`) — listicles/buyer's guides (treated with suspicion; see independence).
+3. **Video reviews** (`video_review`) — YouTube and similar (hands-on, teardown-style preferred).
+4. **Community/forums** (`community_forum`) — Reddit, specialist forums, Q&A.
+5. **Retailer user-reviews** (`retailer_user_review`) — ratings/reviews on storefronts (volume + recency + dissent).
+6. **Spec / teardown / manufacturer** (`spec_teardown_manufacturer`) — datasheets, iFixit-style teardowns, maker docs.
 
-Each harvested item records which class it came from via its `provenance`.
+Each harvested item records which class it came from via `provenance.source_class`.
 
 ## 2. Independence detection → clustering
 
@@ -37,6 +38,11 @@ marks monetized/sponsored content; such items are **down-weighted, not excluded*
 A candidate is identified durably (so it survives renames and matches across merchants) by, in order of
 preference: `gtin` / `upc` / `ean` (global trade item numbers), else `model_no`, plus a `variant`
 (color/size/configuration) when relevant. Free-text product names are display-only, never identity.
+
+The schema **requires** `durable_ids` on every candidate. When no real ID can be found, set
+`durable_ids.unresolved = true` with an `unresolved_reason` — this is an explicit, visible gap, and an
+unresolved identity **caps that candidate's confidence at `low`** (enforced from Phase 3). Identity is
+never silently faked from a product name.
 
 ## 4. Value framework semantics
 
