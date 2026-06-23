@@ -1,4 +1,4 @@
-// Discern Phase 3 decision engine (docs: skills/discern/SKILL.md steps 7-11; docs/definitions.md §3-§6).
+// Discern Phase 3 decision engine (docs: skills/discern/SKILL.md steps 7-12; docs/definitions.md §3-§6).
 //
 // Bridges the two representations of a candidate's substance score:
 //   - WORKING model — a flat `fundamentals_score` on the candidate (what grid.rankCandidates ranks over).
@@ -136,7 +136,7 @@ export function choosePick(rec) {
   return { pick, tiedPicks, ranked, tie };
 }
 
-// --- Outcome engine (definitions.md §1, §5; SKILL.md step 11) --------------------------------------
+// --- Outcome engine (definitions.md §1, §5; SKILL.md step 12) --------------------------------------
 
 // Substantive independent source-classes that satisfy the safety "fundamentals" bar. Editorial roundups
 // and retailer user-reviews are deliberately excluded — too gameable to clear a safety category alone.

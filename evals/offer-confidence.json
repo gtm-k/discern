@@ -1,0 +1,40 @@
+{
+  "description": "Phase 4 offer calibration (docs/definitions.md §7), the offer analog of confidence-calibration.json. Asserts that tools/render.mjs::offerConfidenceViolation rejects: missing/non-numeric/out-of-range offer_confidence; a scraped (non-api) price not marked verify_at_checkout; and a scraped price claiming the high (>=0.80) confidence band. Authoritative (api) offers may omit verify_at_checkout and may sit in the high band.",
+  "cases": [
+    {
+      "name": "authoritative api offer, high band, no verify flag — OK",
+      "offer": { "merchant": "MakerStoreAPI", "price": 299, "currency": "USD", "provenance_tier": "api", "timestamp": "2026-06-22", "offer_confidence": 0.9, "verify_at_checkout": false },
+      "expect_violation": false
+    },
+    {
+      "name": "scraped fetch offer, moderate band, verify flag set — OK",
+      "offer": { "merchant": "ShopX", "price": 298, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "offer_confidence": 0.6, "verify_at_checkout": true },
+      "expect_violation": false
+    },
+    {
+      "name": "missing offer_confidence — REJECT",
+      "offer": { "merchant": "ShopX", "price": 298, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "verify_at_checkout": true },
+      "expect_violation": true
+    },
+    {
+      "name": "offer_confidence out of [0,1] — REJECT",
+      "offer": { "merchant": "MakerStoreAPI", "price": 299, "currency": "USD", "provenance_tier": "api", "timestamp": "2026-06-22", "offer_confidence": 1.3, "verify_at_checkout": false },
+      "expect_violation": true
+    },
+    {
+      "name": "scraped fetch price without verify_at_checkout — REJECT",
+      "offer": { "merchant": "ShopX", "price": 298, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "offer_confidence": 0.6, "verify_at_checkout": false },
+      "expect_violation": true
+    },
+    {
+      "name": "scraped browser price claims high band — REJECT",
+      "offer": { "merchant": "ShopX", "price": 298, "currency": "USD", "provenance_tier": "browser", "timestamp": "2026-06-22", "offer_confidence": 0.85, "verify_at_checkout": true },
+      "expect_violation": true
+    },
+    {
+      "name": "search-tier price without verify_at_checkout — REJECT",
+      "offer": { "merchant": "SnippetShop", "price": 290, "currency": "USD", "provenance_tier": "search", "timestamp": "2026-06-22", "offer_confidence": 0.4, "verify_at_checkout": false },
+      "expect_violation": true
+    }
+  ]
+}

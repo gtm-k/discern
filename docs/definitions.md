@@ -116,3 +116,31 @@ is:
 `npm test` runs this over every golden fixture (all must pass) and over `evals/confidence-calibration.json`
 (which asserts each rejection actually bites). These are *caps*, not auto-grades: clearing a cap does not
 raise confidence; it only removes a ceiling.
+
+## 7. Offer provenance & confidence (sourcing)
+
+Every offer in `offers[]` carries `merchant`, `price`, `currency`, `provenance_tier`, `timestamp`,
+`offer_confidence` (the same 0..1 scale and bands as §6), and `verify_at_checkout`. `returns` and
+`warranty` are recorded when known (and weighted up for gifts — §5.4).
+
+**Authoritative vs scraped.** `provenance_tier = api` (a merchant/aggregator API returning a structured
+price) is the only **authoritative** tier. `search`, `fetch`, and `browser` are **scraped /
+non-authoritative**: the price is a point-in-time observation that may be stale or wrong.
+
+**Verify-at-checkout rule.** Any scraped (non-`api`) price **must** set `verify_at_checkout = true`, and
+the rendered report **must** show a "verify at checkout" caveat for it (`docs/render.md`). An authoritative
+`api` price may omit it.
+
+### Machine-enforced offer calibration (Phase 4 — `tools/render.mjs`)
+
+The offer-calibration check (`offerConfidenceViolation`) — the offer analog of §6's
+`claimConfidenceViolation` — **rejects** any offer whose `offer_confidence` is:
+
+- **missing / non-numeric**, or outside `[0, 1]`;
+- present on a **scraped (non-`api`) price not marked `verify_at_checkout`**;
+- **≥ 0.80 (high band) on a scraped (non-`api`) price** — a scraped point-in-time price cannot be
+  near-certain; only an authoritative `api` price can reach the high band.
+
+`npm test` runs this over every golden fixture (all must pass) and over `evals/offer-confidence.json`
+(which asserts each rejection bites). As in §6 these are *caps*, not auto-grades. Offer confidence is
+**never silently defaulted to high**; an offer with no calibrated confidence is rejected, not rendered.

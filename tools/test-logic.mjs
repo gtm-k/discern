@@ -13,6 +13,12 @@ import {
   runBeneficiaryDecision,
   shortlistJoinViolations,
 } from "./decision.mjs";
+import {
+  renderReport,
+  confidenceBand,
+  offerConfidenceViolation,
+  offerViolations,
+} from "./render.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -188,10 +194,63 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   }
 }
 
+// --- Phase 4: offer calibration + verify-at-checkout + rendering (definitions.md §7; docs/render.md) -
+{
+  // Real golden offers must all be calibrated: confidence present + in range, scraped -> verify_at_checkout,
+  // no scraped price riding the high band. (Acceptance: REJECT any offer lacking a calibrated confidence.)
+  for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient"]) {
+    const v = offerViolations(load(`evals/golden/${name}.json`));
+    expect(`offer calibrated: ${name}`, v.length === 0, `violations: ${v.join("; ")}`);
+  }
+  // The offer-calibration check REJECTS miscalibrated offers and ACCEPTS calibrated ones (each rule bites).
+  const fx = load("evals/offer-confidence.json");
+  for (const c of fx.cases) {
+    const v = offerConfidenceViolation(c.offer);
+    expect(`offer-calibration: ${c.name}`, (v !== null) === c.expect_violation,
+      `expected violation=${c.expect_violation}, got ${v === null ? "none" : v}`);
+  }
+
+  // Renderer surfaces the human report: outcome, pick, rationale, runners-up, each offer's confidence BAND,
+  // the verify-at-checkout marker, per-claim confidence, caveats, and the real search_universe.
+  const rec = load("evals/golden/electronics-headphones.json");
+  const report = renderReport(rec);
+  expect("render: shows outcome", report.includes("RECOMMEND"), `report missing outcome:\n${report}`);
+  expect("render: shows pick", report.includes(rec.pick.product), `report missing pick ${rec.pick.product}`);
+  expect("render: shows rationale", report.includes(rec.rationale.slice(0, 24)), `report missing rationale`);
+  expect("render: shows runner-up", report.includes(rec.runners_up[0].product), `report missing runner-up`);
+  for (const o of rec.offers) {
+    const band = confidenceBand(o.offer_confidence);
+    expect(`render: offer ${o.merchant} shows confidence band`, report.includes(band),
+      `report missing band "${band}" for ${o.merchant}`);
+    expect(`render: offer ${o.merchant} shows merchant + price`,
+      report.includes(o.merchant) && report.includes(String(o.price)), `report missing offer line for ${o.merchant}`);
+  }
+  // A scraped (non-api) offer must NEVER be presented without the verify-at-checkout warning.
+  expect("render: scraped offer shows verify-at-checkout", /verify at checkout/i.test(report),
+    `report missing verify-at-checkout marker:\n${report}`);
+  // Per-claim confidence is displayed (claim text + band).
+  const ev0 = rec.candidates[0].evidence[0];
+  expect("render: shows a per-claim line", report.includes(ev0.claim.slice(0, 20)), `report missing per-claim line`);
+  // search_universe transparency: queries run + unavailable tiers appear in the report.
+  for (const q of rec.search_universe.queries_run)
+    expect(`render: shows query "${q}"`, report.includes(q), `report missing query ${q}`);
+  for (const t of rec.search_universe.tiers_unavailable)
+    expect(`render: shows unavailable tier "${t}"`, report.includes(t), `report missing tier ${t}`);
+  // Caveats are surfaced verbatim.
+  expect("render: shows caveat", report.includes(rec.caveats[0]), `report missing caveat`);
+
+  // INSUFFICIENT_EVIDENCE renders honestly: reason_code shown, NO fabricated pick, universe still surfaced.
+  const insuf = load("evals/golden/safety-supplement.json");
+  const ir = renderReport(insuf);
+  expect("render: insufficient shows outcome", ir.includes("INSUFFICIENT_EVIDENCE"), `missing outcome`);
+  expect("render: insufficient shows reason_code", ir.includes(insuf.reason_code), `missing reason_code ${insuf.reason_code}`);
+  expect("render: insufficient surfaces search_universe", /search universe/i.test(ir), `missing universe section`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering).`);

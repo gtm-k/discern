@@ -18,6 +18,7 @@ conforms to `schemas/recommendation-object.schema.json`.
 - `docs/definitions.md` — source-classes, independence clustering, durable IDs, value framework, gift
   branches, and confidence semantics (the 0..1 scale). **Binding.**
 - `docs/data-access.md` — the data tiers, policy gate, and fetch budgets you must obey.
+- `docs/render.md` — how the Recommendation Object becomes the human report (offer calibration + verify-at-checkout).
 - `profiles/self.md` (or `profiles/recipients/<name>.md`) — the active preference profile.
 
 ## The steps
@@ -89,10 +90,19 @@ recommendation with an empty pick.
 Only now bring in price. Optimize **value-per-dollar**, not lowest price: a "good enough" option within
 budget can beat a pricier "best." Use the profile's `category_budgets` as the "good enough" bar.
 
-### 11. Sourcing & recommend
-Find where to buy and the best price for the pick(s). Every offer carries `provenance_tier` + `timestamp`;
-any scraped price is marked `verify_at_checkout`. Emit the Recommendation Object with one explicit
-`outcome`:
+### 11. Sourcing
+Find where to buy and the best price for the pick(s) — only the pick(s), not the whole grid. For each
+offer record `merchant`, `price`, `currency`, `provenance_tier`, `timestamp`, and `returns`/`warranty`
+when known (for a gift, returnability is weighted up — `definitions.md §5.4`). Calibrate `offer_confidence`
+on the 0..1 scale (`definitions.md §7`): only an authoritative `api` price can reach the high band. Every
+scraped (non-`api`) price **must** set `verify_at_checkout=true` — the eval harness rejects a scraped offer
+without it, and a scraped offer cannot carry high confidence. Optimize **value-per-dollar**, not lowest
+price (step 10). Record what you searched, hit, and failed to reach in `search_universe`.
+
+### 12. Recommend & render
+Emit the Recommendation Object with one explicit `outcome`, then render the human report per
+`docs/render.md` (the grid, the pick + rationale, runners-up, offers with provenance + per-offer
+confidence band + verify-at-checkout, per-claim confidence, caveats, and the real `search_universe`):
 - `RECOMMEND` — clear, well-supported pick.
 - `RECOMMEND_WITH_CAVEATS` — a pick plus material caveats (thin reviews, price volatility, etc.).
 - `INSUFFICIENT_EVIDENCE` (+ `reason_code`) — when consensus is absent (`NO_CONSENSUS`), evidence is too
