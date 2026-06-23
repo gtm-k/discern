@@ -25,12 +25,14 @@ computed but never rendered is, for the user, a silent failure.
    **unavailable tiers**, budgets hit, fetches used. Always rendered, even when the run was thin — never
    imply "everything" was searched.
 
-## Offer calibration (enforced, not advisory)
+## Offer calibration (enforced at test time AND at render time)
 
 `render.mjs::offerConfidenceViolation(offer)` is the offer analog of the Phase-3 claim-confidence check
-(`decision.mjs::claimConfidenceViolation`). It runs over every golden fixture in `npm test` (all must be
-clean) and over `evals/offer-confidence.json` (which asserts each rule actually bites). It **rejects** an
-offer whose `offer_confidence` is:
+(`decision.mjs::claimConfidenceViolation`). It runs in **two** places so the test gate and the user see the
+same signal: over every golden fixture in `npm test` (all must be clean) and over
+`evals/offer-confidence.json` (which asserts each rule actually bites), **and** inside `renderReport` for
+every offer — a failing offer is rendered as `⚠ uncalibrated (<reason>)`, never as a trusted
+`confidence: <band>` cell. It **rejects** an offer whose `offer_confidence` is:
 
 - **missing / non-numeric**, or outside `[0, 1]`;
 - present on a **scraped (non-`api`) price not marked `verify_at_checkout`** — see the rule below;

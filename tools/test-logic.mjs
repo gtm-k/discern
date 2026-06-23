@@ -218,16 +218,19 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render: shows pick", report.includes(rec.pick.product), `report missing pick ${rec.pick.product}`);
   expect("render: shows rationale", report.includes(rec.rationale.slice(0, 24)), `report missing rationale`);
   expect("render: shows runner-up", report.includes(rec.runners_up[0].product), `report missing runner-up`);
+  // Assert on the offer's OWN line (not the whole report) so the band/verify checks cannot pass vacuously
+  // from grid or overall-confidence text that happens to share the band word.
+  const reportLines = report.split("\n");
   for (const o of rec.offers) {
-    const band = confidenceBand(o.offer_confidence);
-    expect(`render: offer ${o.merchant} shows confidence band`, report.includes(band),
-      `report missing band "${band}" for ${o.merchant}`);
-    expect(`render: offer ${o.merchant} shows merchant + price`,
-      report.includes(o.merchant) && report.includes(String(o.price)), `report missing offer line for ${o.merchant}`);
+    const cell = `confidence: ${confidenceBand(o.offer_confidence)} (${o.offer_confidence.toFixed(2)})`;
+    const line = reportLines.find((l) => l.includes(o.merchant) && l.includes(String(o.price)));
+    expect(`render: offer ${o.merchant} has its own line`, !!line, `no offer line for ${o.merchant}`);
+    expect(`render: offer ${o.merchant} shows calibrated confidence on its line`, !!line && line.includes(cell),
+      `offer line missing "${cell}": ${line}`);
+    // A scraped (non-api) offer must NEVER be presented without the verify-at-checkout warning, on its own line.
+    expect(`render: offer ${o.merchant} shows verify-at-checkout on its line`, !!line && /verify at checkout/i.test(line),
+      `offer line missing verify marker: ${line}`);
   }
-  // A scraped (non-api) offer must NEVER be presented without the verify-at-checkout warning.
-  expect("render: scraped offer shows verify-at-checkout", /verify at checkout/i.test(report),
-    `report missing verify-at-checkout marker:\n${report}`);
   // Per-claim confidence is displayed (claim text + band).
   const ev0 = rec.candidates[0].evidence[0];
   expect("render: shows a per-claim line", report.includes(ev0.claim.slice(0, 20)), `report missing per-claim line`);
@@ -245,6 +248,62 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render: insufficient shows outcome", ir.includes("INSUFFICIENT_EVIDENCE"), `missing outcome`);
   expect("render: insufficient shows reason_code", ir.includes(insuf.reason_code), `missing reason_code ${insuf.reason_code}`);
   expect("render: insufficient surfaces search_universe", /search universe/i.test(ir), `missing universe section`);
+}
+
+// --- Phase 4 review hardening: the RENDERER enforces calibration + degrades observably (ensemble) ----
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  // HIGH-1: the renderer must run the calibration check itself — a scraped, high-band price is NEVER
+  // shown to the user as trusted "high" confidence (the dishonesty §7 exists to prevent).
+  const scrapedHigh = structuredClone(base);
+  scrapedHigh.offers = [{ merchant: "ShadyShop", price: 99, currency: "USD", provenance_tier: "browser",
+    timestamp: "2026-06-22", offer_confidence: 0.95, verify_at_checkout: true }];
+  const shReport = renderReport(scrapedHigh);
+  expect("render hardening: scraped high-band NOT shown as high", !shReport.includes("high (0.95)"),
+    `scraped price shown as high:\n${shReport}`);
+  expect("render hardening: scraped high-band flagged uncalibrated", /uncalibrated/i.test(shReport),
+    `missing uncalibrated marker:\n${shReport}`);
+  expect("render hardening: scraped offer still warns verify-at-checkout", /verify at checkout/i.test(shReport),
+    `missing verify marker`);
+
+  // HIGH-1b: a missing offer_confidence renders an uncalibrated marker, never a trusted band.
+  const noConf = structuredClone(base);
+  noConf.offers = [{ merchant: "NoConfShop", price: 100, currency: "USD", provenance_tier: "fetch",
+    timestamp: "2026-06-22", verify_at_checkout: true }];
+  expect("render hardening: missing offer confidence flagged uncalibrated", /uncalibrated/i.test(renderReport(noConf)),
+    `missing uncalibrated marker for no-confidence offer`);
+
+  // HIGH-2: a null offer element must not crash the whole report (renderReport + offerViolations both guard).
+  const nullOffer = structuredClone(base);
+  nullOffer.offers = [null, base.offers[0]];
+  let threw = false, nr = "";
+  try { nr = renderReport(nullOffer); } catch { threw = true; }
+  expect("render hardening: null offer element does not crash render", !threw && nr.length > 0, `renderReport threw on null offer`);
+  expect("render hardening: malformed offer surfaced", /malformed offer/i.test(nr), `missing malformed-offer note`);
+  let threw2 = false;
+  try { offerViolations(nullOffer); } catch { threw2 = true; }
+  expect("render hardening: offerViolations does not crash on null offer", !threw2, `offerViolations threw on null offer`);
+
+  // Codex HIGH: an INSUFFICIENT_EVIDENCE object carrying a stray pick must NOT render it as the recommendation.
+  const insufWithPick = structuredClone(base);
+  insufWithPick.outcome = "INSUFFICIENT_EVIDENCE";
+  insufWithPick.reason_code = "THIN_EVIDENCE";
+  const iwp = renderReport(insufWithPick);
+  expect("render hardening: no Pick section for INSUFFICIENT_EVIDENCE", !iwp.includes("## Pick"),
+    `Pick section rendered for INSUFFICIENT_EVIDENCE:\n${iwp}`);
+  expect("render hardening: INSUFFICIENT shows reason", iwp.includes("THIN_EVIDENCE"), `missing reason`);
+
+  // MED-1: a RECOMMEND with a pick but no offers must surface the sourcing gap, not silently omit it.
+  const noOffers = structuredClone(base);
+  delete noOffers.offers;
+  expect("render hardening: empty offers surfaces sourcing gap", /no offers sourced/i.test(renderReport(noOffers)),
+    `missing sourcing-gap note`);
+
+  // LOW-1: rendering a null / non-object recommendation must not throw.
+  let threw3 = false, nullRec = "";
+  try { nullRec = renderReport(null); } catch { threw3 = true; }
+  expect("render hardening: renderReport(null) does not throw", !threw3 && nullRec.length > 0, `renderReport(null) threw`);
 }
 
 // --- Report ----------------------------------------------------------------------------------------

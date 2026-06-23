@@ -143,4 +143,7 @@ The offer-calibration check (`offerConfidenceViolation`) — the offer analog of
 
 `npm test` runs this over every golden fixture (all must pass) and over `evals/offer-confidence.json`
 (which asserts each rejection bites). As in §6 these are *caps*, not auto-grades. Offer confidence is
-**never silently defaulted to high**; an offer with no calibrated confidence is rejected, not rendered.
+**never silently defaulted to high**. The check runs in two places so both actors get the same signal:
+the test harness rejects miscalibrated offers in fixtures, and `tools/render.mjs::renderReport` runs it at
+render time — a miscalibrated or scraped-high-band offer reaches the user only as `⚠ uncalibrated`
+(stating why), never as a trusted confidence band.

@@ -111,9 +111,10 @@ confidence band + verify-at-checkout, per-claim confidence, caveats, and the rea
   (`INSUFFICIENT_ACCESS`). **Prefer this over a confident guess.**
 
 ## Honesty rules (non-negotiable)
-- Tag every claim and offer with calibrated `confidence` (0..1; `definitions.md §6`). Never default to high.
-  Affiliate/sponsored, non-independent, and unresolved-identity claims are **capped at moderate** — the eval
-  harness rejects any miscalibrated value.
+- Tag every claim with a calibrated `claim_confidence` and every offer with a calibrated `offer_confidence`
+  (0..1; `definitions.md §6`–`§7`). Never default to high. Affiliate/sponsored, non-independent, and
+  unresolved-identity claims — and any scraped (non-`api`) offer — are **capped at moderate**; the eval
+  harness *and* the renderer reject any miscalibrated value (a bad offer renders as `⚠ uncalibrated`).
 - Report the real `search_universe`: what you searched, what failed/was blocked, what tiers were missing.
   Never imply you searched "everything."
 - Surface counterevidence in the rationale. Cite provenance. When unsure, say so and lower confidence.

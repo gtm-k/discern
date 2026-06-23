@@ -10,10 +10,12 @@
 //      rationale, runners-up, offers with provenance + per-offer confidence band + verify-at-checkout,
 //      per-claim confidence, caveats, the outcome, and the real search_universe.
 //
-// Actor-observability (the user sees ONLY the rendered report): renderReport derives the
-// verify-at-checkout warning from the provenance tier itself, not solely from the data flag, so a
-// mis-flagged scraped price can never reach the user without the caveat. The calibration check is what
-// catches the underlying data fault at test time.
+// Actor-observability (the user sees ONLY the rendered report): renderReport runs
+// offerConfidenceViolation on every offer at render time, so the user and the test gate get the SAME
+// signal — a miscalibrated or scraped-high-band offer reaches the user only as "⚠ uncalibrated", never
+// as a trusted confidence band. The verify-at-checkout warning is additionally derived from the
+// provenance tier itself (not just the data flag), so a mis-flagged scraped price still carries the
+// caveat. A malformed/absent offer is surfaced as a visible gap, never silently dropped or crashed on.
 
 import { rankCandidates } from "./grid.mjs";
 import { rankingModel } from "./decision.mjs";
@@ -60,7 +62,8 @@ export function offerConfidenceViolation(offer) {
 /** All per-offer calibration violations across a Recommendation Object (empty array = all calibrated). */
 export function offerViolations(rec) {
   const out = [];
-  for (const o of rec.offers ?? []) {
+  for (const o of rec?.offers ?? []) {
+    if (!o || typeof o !== "object") { out.push("<offer>: not an object"); continue; } // guard before any deref
     const v = offerConfidenceViolation(o);
     if (v) out.push(`${o.merchant ?? "<offer>"}: ${v}`);
   }
@@ -107,15 +110,23 @@ function renderGrid(rec, lines) {
   lines.push("");
 }
 
-function renderOffers(rec, lines) {
+function renderOffers(rec, lines, recommendFamily) {
   const offers = rec.offers ?? [];
-  if (!offers.length) return;
+  if (!offers.length) {
+    // A recommended pick with no sourced offers is a visible gap, not a silent omission.
+    if (recommendFamily && rec.pick)
+      lines.push("## Offers (where to buy)", "No offers sourced — see Search universe below.", "");
+    return;
+  }
   lines.push("## Offers (where to buy)");
   for (const o of offers) {
+    if (!o || typeof o !== "object") { lines.push("- ⚠ malformed offer omitted"); continue; } // never deref a bad element
+    const violation = offerConfidenceViolation(o); // renderer runs the SAME check the gate uses.
     const parts = [
       `${o.merchant} — ${o.price}${o.currency ? ` ${o.currency}` : ""}`,
       `provenance: ${o.provenance_tier}`,
-      `confidence: ${conf(o.offer_confidence)}`,
+      // An uncalibrated offer never shows a trusted band — it shows WHY it can't be trusted.
+      violation ? `⚠ uncalibrated (${violation})` : `confidence: ${conf(o.offer_confidence)}`,
     ];
     if (o.timestamp) parts.push(`as of ${o.timestamp}`);
     if (o.region) parts.push(`region: ${o.region}`);
@@ -134,9 +145,12 @@ function renderOffers(rec, lines) {
  * search_universe (including failed/blocked sources and unavailable tiers) is always surfaced.
  */
 export function renderReport(rec) {
+  if (!rec || typeof rec !== "object")
+    return "# Discern recommendation\n\n⚠ No recommendation object to render.";
+  const recommendFamily = rec.outcome === "RECOMMEND" || rec.outcome === "RECOMMEND_WITH_CAVEATS";
   const lines = [];
   lines.push("# Discern recommendation", "");
-  const head = [`**Outcome:** ${rec.outcome}`];
+  const head = [`**Outcome:** ${rec.outcome ?? "(missing outcome)"}`];
   if (rec.reason_code && rec.reason_code !== "NONE") head.push(`**Reason:** ${rec.reason_code}`);
   head.push(`**Overall confidence:** ${conf(rec.confidence_overall)}`);
   lines.push(head.join("  ·  "), "");
@@ -148,25 +162,35 @@ export function renderReport(rec) {
     lines.push("");
   }
 
-  if (rec.pick) {
+  // A pick is presented ONLY for a RECOMMEND-family outcome with an actual pick — never under
+  // INSUFFICIENT_EVIDENCE (a stray pick on such an object must not be shown as the recommendation).
+  if (recommendFamily && rec.pick) {
     lines.push(`## Pick — ${rec.pick.product}${rec.pick.maker ? ` by ${rec.pick.maker}` : ""}`);
     if (rec.rationale) lines.push(rec.rationale);
     if (rec.value_assessment?.summary)
       lines.push(`**Value:** ${rec.value_assessment.summary}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${rec.value_assessment.value_per_dollar})` : ""}`);
     lines.push("");
   } else {
-    lines.push("## No single pick", "No candidate cleared the bar — see the reason above and the grid below.", "");
+    lines.push("## No single pick");
+    if (recommendFamily) {
+      lines.push("Top candidates are tied — presented as a judgment call (see the grid), not a single pick.");
+    } else {
+      const reason = rec.reason_code && rec.reason_code !== "NONE" ? rec.reason_code : "unspecified (reason_code missing)";
+      lines.push(`Outcome is ${rec.outcome ?? "unknown"} — ${reason}. No pick is presented.`);
+    }
+    lines.push("");
   }
 
   renderGrid(rec, lines);
 
-  if (rec.runners_up?.length) {
+  // Runners-up are recommendations too — only surface them when the outcome actually recommends.
+  if (recommendFamily && rec.runners_up?.length) {
     lines.push("## Runners-up");
     for (const r of rec.runners_up) lines.push(`- ${r.product}${r.maker ? ` by ${r.maker}` : ""}`);
     lines.push("");
   }
 
-  renderOffers(rec, lines);
+  renderOffers(rec, lines, recommendFamily);
 
   if (rec.caveats?.length) {
     lines.push("## Caveats");
