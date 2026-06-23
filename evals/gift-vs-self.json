@@ -1,0 +1,43 @@
+{
+  "description": "Self-vs-gift switch (Phase 3, docs/definitions.md §5). The SAME candidate set is run under beneficiary=self and beneficiary=recipient. Observable differences must appear: (1) the recipient's hard filters apply and the self's do NOT transfer unless applies_to_gifts=true; (2) returnability is weighted up in the gift branch and is decisive between close options. Logic fixture — not schema-validated; consumed by tools/test-logic.mjs.",
+  "self_profile": {
+    "kind": "self",
+    "hard_filters": [
+      {
+        "dimension": "materials",
+        "rule": "clothing must be natural / non-synthetic (linen, cotton, wool); avoid polyester/acrylic",
+        "applies_to_gifts": false,
+        "match": { "attribute": "material_class", "disallow": ["synthetic"] }
+      }
+    ]
+  },
+  "recipient_profile": {
+    "kind": "recipient",
+    "name": "Mom",
+    "hard_filters": [
+      {
+        "dimension": "allergy",
+        "rule": "no wool (sensitive skin)",
+        "applies_to_gifts": true,
+        "match": { "attribute": "contains_wool", "equals": true }
+      }
+    ]
+  },
+  "candidates": [
+    { "product": "Merino Wool Sweater", "material_class": "natural", "contains_wool": true, "returnable": true, "handmade_local": false, "fundamentals_score": 0.82 },
+    { "product": "Recycled Polyester Fleece", "material_class": "synthetic", "contains_wool": false, "returnable": false, "handmade_local": false, "fundamentals_score": 0.75 },
+    { "product": "Organic Cotton Crewneck", "material_class": "natural", "contains_wool": false, "returnable": true, "handmade_local": false, "fundamentals_score": 0.74 }
+  ],
+  "expected": {
+    "self": {
+      "winner": "Merino Wool Sweater",
+      "disqualified": ["Recycled Polyester Fleece"]
+    },
+    "recipient": {
+      "winner": "Organic Cotton Crewneck",
+      "disqualified": ["Merino Wool Sweater"]
+    },
+    "self_only_filter_not_transferred": "Recycled Polyester Fleece",
+    "returnability_decisive_for_recipient": true
+  }
+}

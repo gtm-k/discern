@@ -1,0 +1,13 @@
+{
+  "description": "Per-claim confidence calibration (Phase 3, docs/definitions.md §3 + §6). A claim must carry a calibrated confidence value: present and numeric, and respecting the provenance caps — affiliate/sponsored and non-independent sources cannot reach the high band, and a candidate with unresolved durable_ids cannot reach the high band. expect_violation=true means the calibration check must REJECT the claim. Logic fixture — consumed by tools/test-logic.mjs.",
+  "cases": [
+    { "name": "independent-resolved-high-ok", "unresolved": false, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.85 }, "expect_violation": false },
+    { "name": "affiliate-high-rejected", "unresolved": false, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.90 }, "expect_violation": true },
+    { "name": "affiliate-moderate-ok", "unresolved": false, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.60 }, "expect_violation": false },
+    { "name": "non-independent-high-rejected", "unresolved": false, "claim": { "independence_flag": false, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.85 }, "expect_violation": true },
+    { "name": "unresolved-high-rejected", "unresolved": true, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.82 }, "expect_violation": true },
+    { "name": "unresolved-moderate-ok", "unresolved": true, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.70 }, "expect_violation": false },
+    { "name": "missing-value-rejected", "unresolved": false, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": false }, "expect_violation": true },
+    { "name": "out-of-range-rejected", "unresolved": false, "claim": { "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 1.4 }, "expect_violation": true }
+  ]
+}

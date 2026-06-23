@@ -40,9 +40,18 @@ preference: `gtin` / `upc` / `ean` (global trade item numbers), else `model_no`,
 (color/size/configuration) when relevant. Free-text product names are display-only, never identity.
 
 The schema **requires** `durable_ids` on every candidate. When no real ID can be found, set
-`durable_ids.unresolved = true` with an `unresolved_reason` — this is an explicit, visible gap, and an
-unresolved identity **caps that candidate's confidence at `low`** (enforced from Phase 3). Identity is
-never silently faked from a product name.
+`durable_ids.unresolved = true` with an `unresolved_reason` — this is an explicit, visible gap. An
+unresolved identity **prevents that candidate from reaching the `high` confidence band** (it is capped at
+`moderate`), enforced from Phase 3 by the confidence-calibration check (§6). Identity is never silently
+faked from a product name.
+
+> **Why cap at `moderate`, not `low` (Phase 3 refinement, supersedes the original "cap at low").**
+> Identity-resolution and evidence-strength are orthogonal axes. Handmade / local / boutique items — the
+> category the value framework deliberately elevates (§4) — *structurally* lack GTINs, so capping every
+> unresolved candidate at `low` would systematically suppress exactly what Discern exists to surface (a
+> rule fighting another rule). A missing durable ID is a **cross-merchant matching / sourcing** caveat
+> (you can't guarantee you're pricing the same SKU), not weak evidence: it blocks near-certainty (the
+> `high` band) but solid independent endorsement can still legitimately earn `moderate`.
 
 ## 4. Value framework semantics
 
@@ -89,3 +98,17 @@ Provenance→confidence mapping (starting points, then adjusted):
 
 Confidence is **never silently defaulted to high**. Unknown provenance → low. Phases 3 and 4 reject any
 claim or offer emitted without a calibrated confidence value.
+
+### Machine-enforced calibration (Phase 3 — `tools/decision.mjs`)
+
+The confidence-calibration check (`claimConfidenceViolation`) **rejects** any claim whose `claim_confidence`
+is:
+
+- **missing / non-numeric**, or outside `[0, 1]`;
+- **≥ 0.80 while `affiliate_or_sponsored_flag = true`** — affiliate/sponsored evidence caps at `moderate`;
+- **≥ 0.80 while `independence_flag = false`** — non-independent (cluster-collapsed) evidence cannot be high-band;
+- **≥ 0.80 while the owning candidate's `durable_ids.unresolved = true`** — unresolved identity caps at `moderate` (§3).
+
+`npm test` runs this over every golden fixture (all must pass) and over `evals/confidence-calibration.json`
+(which asserts each rejection actually bites). These are *caps*, not auto-grades: clearing a cap does not
+raise confidence; it only removes a ceiling.

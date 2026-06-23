@@ -1,0 +1,55 @@
+{
+  "description": "Decision-engine outcomes (Phase 3). 'genuine-tie': two candidates equal on fundamentals AND recurrence — the engine must surface a judgment call (tie=true), never fabricate a sole clear winner. 'recall-demotes-pick': the top candidate by R1 carries a recall counterevidence and therefore cannot be the pick; the clean runner-up wins. Logic fixture — consumed by tools/test-logic.mjs.",
+  "cases": [
+    {
+      "name": "genuine-tie",
+      "expect": { "family": "RECOMMEND", "tie": true },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "mechanical keyboard, tactile" },
+        "triage": { "stakes": "low", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "BoardA", "maker": "MakerA", "durable_ids": { "model_no": "A-1" },
+            "evidence": [ { "claim": "Top tactile feel in independent reviews", "source_cluster_id": "k1", "provenance": { "url": "https://example.com/a", "owner": "ReviewA", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.80 } ],
+            "recurrence_over_clusters": 2
+          },
+          {
+            "product": "BoardB", "maker": "MakerB", "durable_ids": { "model_no": "B-1" },
+            "evidence": [ { "claim": "Equally praised tactile feel in independent reviews", "source_cluster_id": "k2", "provenance": { "url": "https://example.com/b", "owner": "ReviewB", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.80 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "BoardA", "fundamentals_card": { "summary": "Tactile switches, hot-swap.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "switch", "finding": "Tactile, hot-swap" } ] } },
+          { "product": "BoardB", "fundamentals_card": { "summary": "Tactile switches, hot-swap.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "switch", "finding": "Tactile, hot-swap" } ] } }
+        ]
+      }
+    },
+    {
+      "name": "recall-demotes-pick",
+      "expect": { "family": "RECOMMEND", "tie": false, "pick": "CleanRunnerUp", "pick_not": "TopByFundamentals" },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "compact car seat" },
+        "triage": { "stakes": "medium", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "TopByFundamentals", "maker": "MakerT", "durable_ids": { "model_no": "T-1" },
+            "evidence": [ { "claim": "Best-measured fundamentals in independent reviews", "source_cluster_id": "r1", "provenance": { "url": "https://example.com/t", "owner": "ReviewT", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.82 } ],
+            "recurrence_over_clusters": 3
+          },
+          {
+            "product": "CleanRunnerUp", "maker": "MakerC", "durable_ids": { "model_no": "C-1" },
+            "evidence": [ { "claim": "Strong fundamentals, no recalls on record", "source_cluster_id": "r2", "provenance": { "url": "https://example.com/c", "owner": "ReviewC", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "TopByFundamentals", "fundamentals_card": { "summary": "Highest measured fundamentals.", "fundamentals_score": 0.88, "fundamentals": [ { "dimension": "build", "finding": "Top measured" } ] }, "counterevidence": [ { "kind": "recall", "detail": "Manufacturer recall issued for buckle defect", "source": "regulator notice" } ] },
+          { "product": "CleanRunnerUp", "fundamentals_card": { "summary": "Strong fundamentals, no recalls.", "fundamentals_score": 0.75, "fundamentals": [ { "dimension": "build", "finding": "Solid, no recall" } ] }, "counterevidence": [] }
+        ]
+      }
+    }
+  ]
+}

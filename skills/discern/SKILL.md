@@ -50,8 +50,10 @@ disclosed via `affiliate_or_sponsored_flag`.
 
 ### 5. Brand-as-proxy (only when warranted)
 For genuinely new releases with thin reviews, you may lean on the maker's repeated independent top
-placements over time as a proxy. **Disabled for safety-relevant categories** — there, missing fundamentals
-means `INSUFFICIENT_EVIDENCE` (reason `UNSAFE_BRAND_PROXY`), not a brand guess.
+placements over time as a proxy. **Disabled for safety-relevant categories** — there, the absence of
+*independent fundamentals* (an independent, non-monetized professional review, teardown/spec, or video
+review — affiliate roundups and retailer star-ratings do **not** clear the bar) means
+`INSUFFICIENT_EVIDENCE` (reason `UNSAFE_BRAND_PROXY`), not a brand guess.
 
 ### 6. The grid
 Build `candidates[]`: product, maker, `durable_ids` (a real GTIN/UPC/EAN/model_no, or
@@ -62,15 +64,20 @@ consensus signal and the tiebreaker; it does not override substance.
 
 ### 7. Teardown (depth ≥ standard)
 For shortlisted candidates, compare the *fundamentals*, not the marketing: the chip, the technology, the
-materials, genuine unique value propositions. Produce a `fundamentals_card` with a `fundamentals_score`.
-Capture `counterevidence` (recalls, defects, reliability problems, credible dissent) — it never disappears.
+materials, genuine unique value propositions. Produce a `fundamentals_card` with a `fundamentals_score`
+(0..1 — a measure of substance, not popularity). This score, **not** raw recurrence, drives the ranking
+(invariant R1). A candidate whose `durable_ids.unresolved=true` cannot carry `high` confidence — it is
+capped at `moderate` (`definitions.md §3`). Capture `counterevidence` (recalls, defects, reliability
+problems, credible dissent) — it never disappears. A **recall disqualifies that candidate from being the
+pick**; lesser counterevidence (defects, dissent, reliability) is surfaced as a caveat, not auto-disqualifying.
 
 ### 8. Value & preference filter
 Apply the active profile's hard filters (disqualifying) and value framework: **value ≠ price; value ≠
 markup; handmade/local = value** (`definitions.md §4`). Weighted preferences shape, but don't disqualify.
 
 ### 9. Leader / ties
-Surface the front-runner. On a genuine tie, present the judgment call honestly — do not fabricate a winner.
+Surface the front-runner under invariant R1. A **genuine tie** — the top two equal on *both* fundamentals
+and independent recurrence — is presented as an honest judgment call; never fabricate a winner.
 
 ### 10. Price / value gate — LAST
 Only now bring in price. Optimize **value-per-dollar**, not lowest price: a "good enough" option within
@@ -88,6 +95,8 @@ any scraped price is marked `verify_at_checkout`. Emit the Recommendation Object
 
 ## Honesty rules (non-negotiable)
 - Tag every claim and offer with calibrated `confidence` (0..1; `definitions.md §6`). Never default to high.
+  Affiliate/sponsored, non-independent, and unresolved-identity claims are **capped at moderate** — the eval
+  harness rejects any miscalibrated value.
 - Report the real `search_universe`: what you searched, what failed/was blocked, what tiers were missing.
   Never imply you searched "everything."
 - Surface counterevidence in the rationale. Cite provenance. When unsure, say so and lower confidence.
