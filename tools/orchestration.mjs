@@ -234,7 +234,14 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
   const degraded = tiers_unavailable.length > 0;
   const branches_stopped = [];
   const stopped = new Set(); // dedupe branch-stop records
-  const stop = (key) => { if (!stopped.has(key)) { stopped.add(key); branches_stopped.push(key); } };
+  // A stopped branch is a breadth loss. branches_stopped is the orchestrator's full ops-level log, but the
+  // USER sees only the rendered search_universe — so a `visible` stop is ALSO mirrored into the rendered
+  // `sources_failed_or_blocked` (actor-observability: the user must see breadth narrow even on an
+  // access:"ok" run). Budget-exhaustion stops pass visible:false — they are already rendered via budgets_hit.
+  const stop = (key, visible = true) => {
+    if (!stopped.has(key)) { stopped.add(key); branches_stopped.push(key); }
+    if (visible && !universe.sources_failed_or_blocked.includes(key)) universe.sources_failed_or_blocked.push(key);
+  };
 
   // No usable tier at all -> honest INSUFFICIENT_ACCESS, never a fabricated pick.
   if (available.length === 0)
@@ -247,21 +254,27 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
   let dispatched_subagents = 0;
   const canFetch = available.includes("baseline") || available.includes("browser");
 
-  // Subagent fan-out (only when the subagents tier is available). `plan.subagents` carries explicit returns
-  // that are validated + folded at the boundary; a bare `subagent_fanout` count models dispatch slots with
-  // no modeled returns. The cap bounds ONE concurrent wave — excess is denied + recorded, never widened.
+  // Subagent fan-out (only when the subagents tier is available). `plan.subagents` carries EXPLICIT returns
+  // that are validated + folded at the boundary — every dispatched entry is ingested (a missing/garbled
+  // payload fails closed via ingestSubagentResult, never a silent clean dispatch). A bare `subagent_fanout`
+  // count models dispatch SLOTS with no modeled returns (not failures). The cap bounds ONE concurrent wave
+  // — excess is denied + recorded, never widened.
   let subagentPlan = [];
+  let bareFanout = false;
   if (Array.isArray(p.subagents)) subagentPlan = p.subagents;
-  else if (Number.isInteger(p.subagent_fanout) && p.subagent_fanout > 0)
+  else if (Number.isInteger(p.subagent_fanout) && p.subagent_fanout > 0) {
     subagentPlan = Array.from({ length: p.subagent_fanout }, () => null);
+    bareFanout = true;
+  }
   if (subagentPlan.length > 0) {
     if (available.includes("subagents")) {
       let idx = 0;
       for (const sub of subagentPlan) {
         if (!gov.acquireSubagent().allowed) continue; // cap reached -> governor recorded budgets_hit
         dispatched_subagents += 1;
-        if (sub && typeof sub === "object" && sub.payload !== undefined)
-          evidence_count += ingestSubagentResult(sub.kind, sub.payload, universe, idx);
+        // Explicit returns are ALWAYS ingested: ingestSubagentResult fails closed on a missing/non-object
+        // payload (recorded + discarded), so a payload-less entry can never become a silent clean dispatch.
+        if (!bareFanout) evidence_count += ingestSubagentResult(sub?.kind, sub?.payload, universe, idx);
         idx += 1;
       }
     } else {
@@ -283,7 +296,7 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
         if (!universe.sources_hit.includes(item.domain)) universe.sources_hit.push(item.domain);
         if (item.yields_evidence) evidence_count += 1;
       } else {
-        stop(`fetch:${item.domain} (${res.reason})`);
+        stop(`fetch:${item.domain} (${res.reason})`, false); // budget exhaustion: already in budgets_hit
       }
     } else if (item.type === "api") {
       if (!available.includes("api")) { stop("api (tier unavailable)"); continue; }
@@ -292,7 +305,7 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
         api_calls += 1;
         if (item.yields_evidence) evidence_count += 1;
       } else {
-        stop(`api (${res.reason})`);
+        stop(`api (${res.reason})`, false); // budget exhaustion: already in budgets_hit
       }
     } else {
       stop(`unknown work item type "${typeof item.type === "string" ? item.type : String(item.type)}"`);

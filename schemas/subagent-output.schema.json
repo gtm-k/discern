@@ -12,7 +12,11 @@
         "queries_run": { "type": "array", "items": { "type": "string" } },
         "sources_hit": { "type": "array", "items": { "type": "string" } },
         "sources_failed_or_blocked": { "type": "array", "items": { "type": "string" } },
-        "budgets_hit": { "type": "array", "items": { "type": "string" } },
+        "budgets_hit": {
+          "description": "Real budget exhaustions the subagent hit. The `invalid_budget:` prefix is RESERVED for the orchestrator's own config-validation markers (which are excluded from the access gate); a subagent may not use it — doing so would let a spoofed entry suppress the access determination, so such a return is rejected at the boundary.",
+          "type": "array",
+          "items": { "type": "string", "not": { "pattern": "^invalid_budget:" } }
+        },
         "fetches_used": { "type": "integer", "minimum": 0 }
       }
     },

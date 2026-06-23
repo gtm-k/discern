@@ -769,6 +769,86 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `branches_stopped=${JSON.stringify(unknownType.branches_stopped)}`);
 }
 
+// --- Phase 5 post-code review ROUND 2: F8 (silent-failure HIGH) — work-level breadth losses must be
+//     visible to the USER (rendered search_universe), not only to the orchestrator (branches_stopped). --
+{
+  const base = load("evals/golden/electronics-headphones.json");
+  // A productive-but-narrowed run: it gathers evidence (so access stays "ok") yet drops a subagent
+  // fan-out, hits a malformed domain, and an unknown work type. The user sees ONLY the rendered report,
+  // so these losses MUST reach a rendered search_universe field, not just branches_stopped.
+  const r = orchestrate({ capabilities: { subagents: false, browser: false, api: false }, plan: {
+    subagent_fanout: 5,
+    work: [
+      { type: "fetch", domain: "good.example", yields_evidence: true },
+      { type: "fetch", domain: 99 },                 // malformed domain
+      { type: "frobnicate", domain: "x.example" },   // unknown work type
+    ],
+  } });
+  expect("F8: narrowed run still completes access ok", r.access === "ok", `access=${r.access}`);
+  for (const [label, re] of [["dropped fan-out", /subagents unavailable/], ["malformed domain", /malformed domain/],
+    ["unknown work type", /unknown work item/]])
+    expect(`F8: ${label} recorded in a rendered field`, r.search_universe.sources_failed_or_blocked.some((s) => re.test(s)),
+      `sources_failed_or_blocked=${JSON.stringify(r.search_universe.sources_failed_or_blocked)}`);
+  // Render-boundary: the user (who sees ONLY the report) actually sees the narrowing.
+  const rec = structuredClone(base);
+  rec.search_universe = r.search_universe;
+  const report = renderReport(rec);
+  expect("F8: narrowing is visible in the rendered report",
+    /subagents unavailable/.test(report) && /malformed domain/.test(report) && /unknown work item/.test(report),
+    `rendered report missing work-level stops:\n${report.split("\n").filter((l) => /failed\/blocked/i.test(l)).join("\n")}`);
+  // Budget-exhaustion stops are NOT duplicated into failed/blocked (already rendered via budgets_hit).
+  const b = orchestrate({ budgets: { per_domain_fetches: 1 }, plan: { work: [
+    { type: "fetch", domain: "d.example", yields_evidence: true },
+    { type: "fetch", domain: "d.example", yields_evidence: true } ] } });
+  expect("F8: budget stop not double-reported in failed/blocked",
+    !b.search_universe.sources_failed_or_blocked.some((s) => /per_domain_fetches/.test(s)),
+    `budget stop leaked into failed/blocked: ${JSON.stringify(b.search_universe.sources_failed_or_blocked)}`);
+  expect("F8: budget stop still recorded in budgets_hit",
+    b.search_universe.budgets_hit.some((s) => /per_domain_fetches/.test(s)),
+    `budgets_hit=${JSON.stringify(b.search_universe.budgets_hit)}`);
+}
+
+// --- Phase 5 post-code review ROUND 2 (Codex): two regressions introduced by the round-1 fixes --------
+{
+  const goldCand = structuredClone(load("evals/golden/electronics-headphones.json").candidates[0]);
+
+  // New-A (Codex CRITICAL): an explicit plan.subagents entry missing its payload must FAIL CLOSED
+  // (recorded + discarded), not silently inflate dispatched_subagents to a clean empty run.
+  const malformedSubs = orchestrate({ capabilities: { subagents: true }, plan: {
+    subagents: [ { kind: "harvester" }, { kind: "harvester" } ] } }); // objects, no payloads
+  expect("New-A: payload-less subagent entries -> insufficient (not a clean empty run)",
+    malformedSubs.access === "insufficient" && malformedSubs.reason_code === "INSUFFICIENT_ACCESS",
+    `access=${malformedSubs.access}, reason=${malformedSubs.reason_code}`);
+  expect("New-A: payload-less subagent entries are recorded (not silent)",
+    malformedSubs.search_universe.sources_failed_or_blocked.some((s) => /invalid output discarded/.test(s)),
+    `sources_failed_or_blocked=${JSON.stringify(malformedSubs.search_universe.sources_failed_or_blocked)}`);
+  // A bare subagent_fanout count (no explicit returns modeled) is NOT a failure — it models dispatch slots.
+  const bareFan = orchestrate({ capabilities: { subagents: true }, plan: { subagent_fanout: 3,
+    work: [ { type: "fetch", domain: "a.example", yields_evidence: true } ] } });
+  expect("New-A: bare fanout count is not a failure", bareFan.access === "ok" && bareFan.dispatched_subagents === 3,
+    `access=${bareFan.access}, dispatched=${bareFan.dispatched_subagents}`);
+
+  // New-B (Codex CRITICAL): a subagent cannot spoof the reserved `invalid_budget:` namespace to hide a real
+  // exhaustion from the access gate. A delta using that reserved prefix is rejected at the boundary.
+  const spoof = orchestrate({ capabilities: { subagents: true }, plan: {
+    subagents: [ { kind: "harvester", payload: { agent: "harvester", candidates: [],
+      search_universe_delta: { budgets_hit: ["invalid_budget:per_api_calls"] } } } ] } });
+  expect("New-B: subagent using the reserved invalid_budget prefix is rejected + recorded",
+    spoof.access === "insufficient" &&
+    spoof.search_universe.sources_failed_or_blocked.some((s) => /invalid output discarded/.test(s)),
+    `access=${spoof.access}, sfob=${JSON.stringify(spoof.search_universe.sources_failed_or_blocked)}`);
+  expect("New-B: reserved prefix never lands in budgets_hit",
+    !spoof.search_universe.budgets_hit.some((b) => b.startsWith("invalid_budget:")),
+    `budgets_hit=${JSON.stringify(spoof.search_universe.budgets_hit)}`);
+  // A legitimately-labeled subagent budget hit DOES fold and count as real exhaustion.
+  const legitBudget = orchestrate({ capabilities: { subagents: true }, plan: {
+    subagents: [ { kind: "harvester", payload: { agent: "harvester", candidates: [],
+      search_universe_delta: { budgets_hit: ["per_api_calls"] } } } ] } });
+  expect("New-B: legit subagent budget hit folds + counts as exhaustion",
+    legitBudget.search_universe.budgets_hit.includes("per_api_calls") && legitBudget.access === "insufficient",
+    `budgets_hit=${JSON.stringify(legitBudget.search_universe.budgets_hit)}, access=${legitBudget.access}`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
