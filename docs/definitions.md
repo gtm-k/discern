@@ -137,6 +137,7 @@ The offer-calibration check (`offerConfidenceViolation`) — the offer analog of
 `claimConfidenceViolation` — **rejects** any offer whose `offer_confidence` is:
 
 - **missing / non-numeric**, or outside `[0, 1]`;
+- present on an offer whose **`provenance_tier` is unknown or missing** (not one of `search`/`fetch`/`browser`/`api`) — unknown provenance can't be trusted (fail-closed);
 - present on a **scraped (non-`api`) price not marked `verify_at_checkout`**;
 - **≥ 0.80 (high band) on a scraped (non-`api`) price** — a scraped point-in-time price cannot be
   near-certain; only an authoritative `api` price can reach the high band.

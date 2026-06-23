@@ -21,6 +21,7 @@ import { rankCandidates } from "./grid.mjs";
 import { rankingModel } from "./decision.mjs";
 
 const HIGH_BAND = 0.8; // docs/definitions.md §6: confidence >= 0.80 is the "high" band.
+const KNOWN_TIERS = new Set(["search", "fetch", "browser", "api"]); // schema offer.provenance_tier enum.
 
 /**
  * Map a 0..1 confidence to its named band (docs/definitions.md §6). A missing / non-numeric value is
@@ -51,7 +52,9 @@ export function offerConfidenceViolation(offer) {
   const c = offer?.offer_confidence;
   if (typeof c !== "number" || Number.isNaN(c)) return "missing or non-numeric offer_confidence";
   if (c < 0 || c > 1) return `offer_confidence ${c} out of range [0,1]`;
-  const scraped = isScrapedTier(offer.provenance_tier); // undefined tier -> treated as scraped (fail-closed).
+  if (!KNOWN_TIERS.has(offer.provenance_tier)) // unknown provenance can't be trusted (fail-closed).
+    return `unknown or missing provenance_tier "${offer.provenance_tier}"`;
+  const scraped = isScrapedTier(offer.provenance_tier); // any non-api tier is scraped.
   if (scraped && offer.verify_at_checkout !== true)
     return `scraped (${offer.provenance_tier ?? "unknown"}) price must be marked verify_at_checkout`;
   if (scraped && c >= HIGH_BAND)
@@ -89,10 +92,14 @@ function renderBudget(req) {
 
 /** Ranked grid rows joined back to their candidate (evidence) and shortlist item (counterevidence). */
 function renderGrid(rec, lines) {
-  const ranked = rankCandidates(rankingModel(rec));
+  // Coerce sibling arrays so a malformed (non-array) candidates/shortlist degrades to an empty grid
+  // instead of throwing and blanking the whole report.
+  const candidates = Array.isArray(rec.candidates) ? rec.candidates : [];
+  const shortlist = Array.isArray(rec.shortlist) ? rec.shortlist : [];
+  const ranked = rankCandidates(rankingModel({ ...rec, candidates, shortlist }));
   if (!ranked.length) return;
-  const candByProduct = new Map((rec.candidates ?? []).map((c) => [c.product, c]));
-  const shortByProduct = new Map((rec.shortlist ?? []).map((s) => [s.product, s]));
+  const candByProduct = new Map(candidates.map((c) => [c.product, c]));
+  const shortByProduct = new Map(shortlist.map((s) => [s.product, s]));
   lines.push("## The grid (ranked by fundamentals, then independent recurrence)");
   ranked.forEach((row, i) => {
     const flags = [];
@@ -111,10 +118,11 @@ function renderGrid(rec, lines) {
 }
 
 function renderOffers(rec, lines, recommendFamily) {
-  const offers = rec.offers ?? [];
+  const offers = Array.isArray(rec.offers) ? rec.offers : [];
   if (!offers.length) {
-    // A recommended pick with no sourced offers is a visible gap, not a silent omission.
-    if (recommendFamily && rec.pick)
+    // A recommend-family outcome with no sourced offers is a visible gap, not a silent omission —
+    // including a tie (no single pick), where the absence of sourcing is itself load-bearing.
+    if (recommendFamily)
       lines.push("## Offers (where to buy)", "No offers sourced — see Search universe below.", "");
     return;
   }
@@ -122,9 +130,10 @@ function renderOffers(rec, lines, recommendFamily) {
   for (const o of offers) {
     if (!o || typeof o !== "object") { lines.push("- ⚠ malformed offer omitted"); continue; } // never deref a bad element
     const violation = offerConfidenceViolation(o); // renderer runs the SAME check the gate uses.
+    const priceStr = typeof o.price === "number" ? `${o.price}${o.currency ? ` ${o.currency}` : ""}` : "price unavailable";
     const parts = [
-      `${o.merchant} — ${o.price}${o.currency ? ` ${o.currency}` : ""}`,
-      `provenance: ${o.provenance_tier}`,
+      `${o.merchant} — ${priceStr}`,
+      `provenance: ${o.provenance_tier ?? "unknown"}`,
       // An uncalibrated offer never shows a trusted band — it shows WHY it can't be trusted.
       violation ? `⚠ uncalibrated (${violation})` : `confidence: ${conf(o.offer_confidence)}`,
     ];
@@ -184,9 +193,12 @@ export function renderReport(rec) {
   renderGrid(rec, lines);
 
   // Runners-up are recommendations too — only surface them when the outcome actually recommends.
-  if (recommendFamily && rec.runners_up?.length) {
+  if (recommendFamily && Array.isArray(rec.runners_up) && rec.runners_up.length) {
     lines.push("## Runners-up");
-    for (const r of rec.runners_up) lines.push(`- ${r.product}${r.maker ? ` by ${r.maker}` : ""}`);
+    for (const r of rec.runners_up) {
+      if (!r || typeof r !== "object") { lines.push("- ⚠ malformed runner-up omitted"); continue; }
+      lines.push(`- ${r.product}${r.maker ? ` by ${r.maker}` : ""}`);
+    }
     lines.push("");
   }
 

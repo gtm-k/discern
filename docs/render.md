@@ -35,9 +35,12 @@ every offer — a failing offer is rendered as `⚠ uncalibrated (<reason>)`, ne
 `confidence: <band>` cell. It **rejects** an offer whose `offer_confidence` is:
 
 - **missing / non-numeric**, or outside `[0, 1]`;
+- present on an offer whose **`provenance_tier` is unknown or missing** (fail-closed);
 - present on a **scraped (non-`api`) price not marked `verify_at_checkout`** — see the rule below;
 - **≥ 0.80 (high band) on a scraped (non-`api`) price** — a scraped point-in-time price cannot be
   near-certain. Authoritative (`api`) offers may sit in the high band and may omit `verify_at_checkout`.
+
+A null / non-numeric `price` renders as `price unavailable` (never the raw `null`/`undefined`).
 
 These are *caps*, not auto-grades (definitions.md §7): clearing a cap removes a ceiling, it does not raise
 confidence.

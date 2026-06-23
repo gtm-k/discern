@@ -306,6 +306,51 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render hardening: renderReport(null) does not throw", !threw3 && nullRec.length > 0, `renderReport(null) threw`);
 }
 
+// --- Phase 4 review hardening ROUND 2 (ensemble round 2: HIGH-3 sibling-array crash, HIGH-4 tie gap,
+//     Codex MED unknown-tier, MED-1 raw price leak) -----------------------------------------------
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  // HIGH-3a: a malformed runners_up element must not crash the whole report (same class as the offers guard).
+  const badRunner = structuredClone(base);
+  badRunner.runners_up = [null, base.runners_up[0]];
+  let t1 = false, r1 = "";
+  try { r1 = renderReport(badRunner); } catch { t1 = true; }
+  expect("render r2: malformed runner-up does not crash", !t1 && r1.length > 0, `renderReport threw on null runner-up`);
+  expect("render r2: malformed runner-up surfaced", /malformed runner-up/i.test(r1), `missing malformed runner-up note`);
+
+  // HIGH-3b: a non-array candidates must not crash the report.
+  const badCands = structuredClone(base);
+  badCands.candidates = "oops";
+  let t2 = false, r2 = "";
+  try { r2 = renderReport(badCands); } catch { t2 = true; }
+  expect("render r2: non-array candidates does not crash", !t2 && r2.length > 0, `renderReport threw on non-array candidates`);
+
+  // HIGH-4: a RECOMMEND-family TIE (pick=null) with no offers still surfaces the sourcing gap.
+  const tie = structuredClone(base);
+  tie.pick = null; delete tie.offers;
+  expect("render r2: tie with no offers surfaces sourcing gap", /no offers sourced/i.test(renderReport(tie)),
+    `missing sourcing-gap note for a tie`);
+
+  // Codex MED: an unknown / missing provenance_tier is uncalibrated — unknown provenance cannot be trusted.
+  expect("render r2: missing provenance_tier is a violation",
+    offerConfidenceViolation({ merchant: "X", price: 10, currency: "USD", offer_confidence: 0.5, verify_at_checkout: true }) !== null,
+    `missing provenance_tier accepted as calibrated`);
+  const badTier = structuredClone(base);
+  badTier.offers = [{ merchant: "MysteryShop", price: 50, currency: "USD", offer_confidence: 0.6, verify_at_checkout: true }];
+  expect("render r2: unknown-tier offer renders uncalibrated", /uncalibrated/i.test(renderReport(badTier)),
+    `unknown-tier offer not flagged uncalibrated`);
+
+  // MED-1: a null / non-number price must not leak the raw "null"/"undefined" string to the user.
+  const badPrice = structuredClone(base);
+  badPrice.offers = [{ merchant: "NoPriceShop", price: null, currency: "USD", provenance_tier: "api",
+    timestamp: "2026-06-22", offer_confidence: 0.9, verify_at_checkout: false }];
+  const bpr = renderReport(badPrice);
+  expect("render r2: null price does not leak raw null", !/NoPriceShop — null/.test(bpr),
+    `raw null price leaked: ${bpr.split("\n").find((l) => l.includes("NoPriceShop"))}`);
+  expect("render r2: null price shown as unavailable", /price unavailable/i.test(bpr), `missing price-unavailable note`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
