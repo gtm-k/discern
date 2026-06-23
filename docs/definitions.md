@@ -96,8 +96,9 @@ Provenance→confidence mapping (starting points, then adjusted):
 - stale (old `provenance.date`), scraped-without-verification, or `independence_flag=false` → reduce one band.
 - blocked/failed source that would have mattered → it cannot raise confidence; record in `search_universe`.
 
-Confidence is **never silently defaulted to high**. Unknown provenance → low. Phases 3 and 4 reject any
-claim or offer emitted without a calibrated confidence value.
+Confidence is **never silently defaulted to high**. Unknown provenance → low (this is the rule for a
+*claim*'s source; for an *offer*, an unknown/missing `provenance_tier` is rejected as uncalibrated — §7).
+Phases 3 and 4 reject any claim or offer emitted without a calibrated confidence value.
 
 ### Machine-enforced calibration (Phase 3 — `tools/decision.mjs`)
 
