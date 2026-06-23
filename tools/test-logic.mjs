@@ -19,6 +19,14 @@ import {
   offerConfidenceViolation,
   offerViolations,
 } from "./render.mjs";
+import {
+  DEFAULTS,
+  emptyUniverse,
+  detectTiers,
+  createGovernor,
+  validateSubagentResult,
+  orchestrate,
+} from "./orchestration.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -484,10 +492,197 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `leaked search_universe element`);
 }
 
+// --- Phase 5: capability detection + graceful degradation (docs/data-access.md) ---------------------
+{
+  // Baseline is always available; enhancement tiers are gated by capability flags. A disabled/absent
+  // enhancement tier is RECORDED in tiers_unavailable, never silently treated as present.
+  const all = detectTiers({ subagents: true, browser: true, api: true });
+  expect("detectTiers: all enhancement tiers available", all.available.includes("baseline") &&
+    all.available.includes("subagents") && all.available.includes("browser") && all.available.includes("api"),
+    `available=${JSON.stringify(all.available)}`);
+  expect("detectTiers: nothing unavailable when all enabled", all.tiers_unavailable.length === 0,
+    `tiers_unavailable=${JSON.stringify(all.tiers_unavailable)}`);
+
+  const none = detectTiers({});
+  expect("detectTiers: baseline still available with no enhancements", none.available.includes("baseline"),
+    `available=${JSON.stringify(none.available)}`);
+  expect("detectTiers: disabled enhancements recorded unavailable",
+    ["subagents", "browser", "api"].every((t) => none.tiers_unavailable.includes(t)),
+    `tiers_unavailable=${JSON.stringify(none.tiers_unavailable)}`);
+
+  const dark = detectTiers({ baseline: false });
+  expect("detectTiers: no usable tier when even baseline is off", dark.available.length === 0,
+    `available=${JSON.stringify(dark.available)}`);
+}
+
+// --- Phase 5: emptyUniverse seeds all six counters (so they are populated every run) ----------------
+{
+  const u = emptyUniverse();
+  for (const k of ["queries_run", "sources_hit", "sources_failed_or_blocked", "tiers_unavailable", "budgets_hit"]) {
+    expect(`emptyUniverse: ${k} is an array`, Array.isArray(u[k]) && u[k].length === 0, `u.${k}=${JSON.stringify(u[k])}`);
+  }
+  expect("emptyUniverse: fetches_used is 0", u.fetches_used === 0, `u.fetches_used=${u.fetches_used}`);
+  // Sane defaults (core budgets from Phase 1 + enhancement budgets added here).
+  expect("DEFAULTS: max_parallel_subagents default 6", DEFAULTS.max_parallel_subagents === 6,
+    `got ${DEFAULTS.max_parallel_subagents}`);
+  expect("DEFAULTS: per-API call budget present", typeof DEFAULTS.per_api_calls === "number" && DEFAULTS.per_api_calls > 0,
+    `got ${DEFAULTS.per_api_calls}`);
+}
+
+// --- Phase 5: ResourceGovernor concurrency cap (max_parallel_subagents, fail-closed) ----------------
+{
+  const g = createGovernor({ max_parallel_subagents: 2 });
+  expect("governor: 1st subagent acquired", g.acquireSubagent().allowed === true, `1st denied`);
+  expect("governor: 2nd subagent acquired", g.acquireSubagent().allowed === true, `2nd denied`);
+  const third = g.acquireSubagent();
+  expect("governor: 3rd subagent denied at cap", third.allowed === false, `3rd allowed past cap`);
+  expect("governor: cap exhaustion recorded in budgets_hit",
+    g.universe.budgets_hit.some((b) => b.includes("max_parallel_subagents")), `budgets_hit=${JSON.stringify(g.universe.budgets_hit)}`);
+  g.releaseSubagent();
+  expect("governor: slot frees after release", g.acquireSubagent().allowed === true, `denied after release`);
+}
+
+// --- Phase 5: enhancement-tier resource governance is fail-closed (evals/budget-failclose.json) -----
+{
+  const fx = load("evals/budget-failclose.json");
+  for (const c of fx.cases) {
+    const r = orchestrate({ capabilities: c.capabilities, budgets: c.budgets, plan: c.plan });
+    const e = c.expect;
+    if (e.fetches_used !== undefined)
+      expect(`budget-failclose ${c.name}: fetches_used`, r.search_universe.fetches_used === e.fetches_used,
+        `expected ${e.fetches_used}, got ${r.search_universe.fetches_used}`);
+    if (e.api_calls !== undefined)
+      expect(`budget-failclose ${c.name}: api_calls`, r.api_calls === e.api_calls,
+        `expected ${e.api_calls}, got ${r.api_calls}`);
+    if (e.dispatched_subagents !== undefined)
+      expect(`budget-failclose ${c.name}: dispatched_subagents capped`, r.dispatched_subagents === e.dispatched_subagents,
+        `expected ${e.dispatched_subagents}, got ${r.dispatched_subagents}`);
+    if (e.budgets_hit_includes !== undefined)
+      expect(`budget-failclose ${c.name}: budget recorded`,
+        r.search_universe.budgets_hit.some((b) => b.includes(e.budgets_hit_includes)),
+        `budgets_hit=${JSON.stringify(r.search_universe.budgets_hit)}`);
+    if (e.branches_stopped_includes !== undefined)
+      expect(`budget-failclose ${c.name}: branch stopped recorded`,
+        r.branches_stopped.some((b) => b.includes(e.branches_stopped_includes)),
+        `branches_stopped=${JSON.stringify(r.branches_stopped)}`);
+    if (e.access !== undefined)
+      expect(`budget-failclose ${c.name}: access`, r.access === e.access, `expected ${e.access}, got ${r.access}`);
+  }
+}
+
+// --- Phase 5: portable-core guarantee — completes with all enhancement tiers disabled ---------------
+{
+  const fx = load("evals/portable-core.json");
+  let threw = false, r;
+  try { r = orchestrate({ capabilities: fx.capabilities, budgets: fx.budgets, plan: fx.plan }); } catch { threw = true; }
+  expect("portable-core: orchestrate does not throw with enhancements off", !threw && !!r, `orchestrate threw`);
+  const e = fx.expect;
+  expect("portable-core: access ok (run completes)", r.access === e.access, `expected ${e.access}, got ${r.access}`);
+  expect("portable-core: marked degraded", r.degraded === e.degraded, `expected ${e.degraded}, got ${r.degraded}`);
+  expect("portable-core: no subagents dispatched", r.dispatched_subagents === e.dispatched_subagents,
+    `expected ${e.dispatched_subagents}, got ${r.dispatched_subagents}`);
+  expect("portable-core: evidence still gathered via baseline", (r.evidence_count > 0) === e.evidence_gathered,
+    `evidence_count=${r.evidence_count}`);
+  expect("portable-core: disabled tiers recorded unavailable",
+    e.tiers_unavailable.every((t) => r.search_universe.tiers_unavailable.includes(t)),
+    `tiers_unavailable=${JSON.stringify(r.search_universe.tiers_unavailable)}`);
+  expect("portable-core: baseline reported available", r.tiers_available.includes(e.tiers_available_includes),
+    `tiers_available=${JSON.stringify(r.tiers_available)}`);
+}
+
+// --- Phase 5: INSUFFICIENT_ACCESS path — no fabricated pick on a data gap (evals/insufficient-access) -
+{
+  const fx = load("evals/insufficient-access.json");
+  for (const c of fx.cases) {
+    const r = orchestrate({ capabilities: c.capabilities, budgets: c.budgets, plan: c.plan });
+    const e = c.expect;
+    expect(`insufficient-access ${c.name}: access`, r.access === e.access, `expected ${e.access}, got ${r.access}`);
+    expect(`insufficient-access ${c.name}: outcome`, r.outcome === e.outcome, `expected ${e.outcome}, got ${r.outcome}`);
+    expect(`insufficient-access ${c.name}: reason_code`, r.reason_code === e.reason_code,
+      `expected ${e.reason_code}, got ${r.reason_code}`);
+    if (e.evidence_gathered !== undefined)
+      expect(`insufficient-access ${c.name}: no evidence`, (r.evidence_count > 0) === e.evidence_gathered,
+        `evidence_count=${r.evidence_count}`);
+    if (e.budgets_hit_includes !== undefined)
+      expect(`insufficient-access ${c.name}: budget recorded`,
+        r.search_universe.budgets_hit.some((b) => b.includes(e.budgets_hit_includes)),
+        `budgets_hit=${JSON.stringify(r.search_universe.budgets_hit)}`);
+  }
+}
+
+// --- Phase 5: every orchestrate run populates all six search_universe counters ----------------------
+{
+  for (const file of ["evals/portable-core.json", "evals/budget-failclose.json", "evals/insufficient-access.json"]) {
+    const fx = load(file);
+    const cases = fx.cases ?? [fx];
+    for (const c of cases) {
+      const r = orchestrate({ capabilities: c.capabilities, budgets: c.budgets, plan: c.plan });
+      const su = r.search_universe;
+      for (const k of ["queries_run", "sources_hit", "sources_failed_or_blocked", "tiers_unavailable", "budgets_hit"])
+        expect(`counters populated: ${file} [${c.name ?? "single"}] ${k}`, Array.isArray(su[k]),
+          `${k} not an array: ${JSON.stringify(su[k])}`);
+      expect(`counters populated: ${file} [${c.name ?? "single"}] fetches_used`, typeof su.fetches_used === "number",
+        `fetches_used=${su.fetches_used}`);
+    }
+  }
+}
+
+// --- Phase 5: subagent output is schema-validated at the boundary (fail-closed) ---------------------
+{
+  // Valid payloads are built from a REAL golden fixture so they cannot drift from the live contract.
+  const g = load("evals/golden/electronics-headphones.json");
+  const validHarvester = { agent: "harvester", candidates: [structuredClone(g.candidates[0])] };
+  const validTeardown = { agent: "teardown", shortlist: [structuredClone(g.shortlist[0])] };
+  const validSourcing = { agent: "sourcing", offers: [structuredClone(g.offers[0])] };
+  expect("subagent-output: valid harvester accepted", validateSubagentResult("harvester", validHarvester).length === 0,
+    `violations: ${validateSubagentResult("harvester", validHarvester).join("; ")}`);
+  expect("subagent-output: valid teardown accepted", validateSubagentResult("teardown", validTeardown).length === 0,
+    `violations: ${validateSubagentResult("teardown", validTeardown).join("; ")}`);
+  expect("subagent-output: valid sourcing accepted", validateSubagentResult("sourcing", validSourcing).length === 0,
+    `violations: ${validateSubagentResult("sourcing", validSourcing).join("; ")}`);
+
+  // An honest EMPTY harvest is a valid return — it still carries its search_universe_delta so the
+  // orchestrator sees WHY breadth narrowed. (An invalid-and-discarded envelope would lose that signal.)
+  const emptyHarvest = { agent: "harvester", candidates: [],
+    search_universe_delta: { sources_failed_or_blocked: ["forum.example (robots.txt)"] } };
+  expect("subagent-output: empty-but-honest harvest accepted",
+    validateSubagentResult("harvester", emptyHarvest).length === 0,
+    `violations: ${validateSubagentResult("harvester", emptyHarvest).join("; ")}`);
+
+  // Every rejection case must produce at least one violation (the gate bites).
+  const fx = load("evals/subagent-output.json");
+  for (const c of fx.invalid) {
+    const v = validateSubagentResult(c.kind, c.payload);
+    expect(`subagent-output: rejects "${c.name}"`, v.length > 0, `expected violation, got none`);
+  }
+}
+
+// --- Phase 5: renderer surfaces the orchestrated universe (budgets_hit + tiers_unavailable) ---------
+{
+  const base = load("evals/golden/electronics-headphones.json");
+  const r = orchestrate({
+    capabilities: { subagents: false, browser: false, api: false },
+    budgets: { per_domain_fetches: 1 },
+    plan: { queries: ["x"], work: [
+      { type: "fetch", domain: "d.example", yields_evidence: true },
+      { type: "fetch", domain: "d.example", yields_evidence: true },
+    ] },
+  });
+  const rec = structuredClone(base);
+  rec.search_universe = r.search_universe;
+  const report = renderReport(rec);
+  expect("render p5: budgets_hit surfaced in report",
+    r.search_universe.budgets_hit.every((b) => report.includes(b)) && /Budgets hit:/.test(report),
+    `report budgets line missing some of ${JSON.stringify(r.search_universe.budgets_hit)}`);
+  expect("render p5: unavailable tiers surfaced in report",
+    r.search_universe.tiers_unavailable.every((t) => report.includes(t)),
+    `report missing some of ${JSON.stringify(r.search_universe.tiers_unavailable)}`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation).`);

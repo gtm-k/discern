@@ -1,0 +1,77 @@
+{
+  "_doc": "Phase 5 — enhancement-tier resource governance is fail-closed. Every case drives tools/orchestration.mjs::orchestrate and asserts that hitting a budget STOPS that branch and RECORDS it (search_universe.budgets_hit + branches_stopped) — it never silently widens fanout or retries unbounded. A stopped branch is not the same as insufficient access: the run still completes (access:ok) with what it gathered within budget.",
+  "cases": [
+    {
+      "name": "per-domain fetch budget stops that domain and logs",
+      "capabilities": { "subagents": true, "browser": true, "api": true },
+      "budgets": { "per_domain_fetches": 3 },
+      "plan": {
+        "queries": ["best blender under 200"],
+        "work": [
+          { "type": "fetch", "domain": "shoppy.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "shoppy.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "shoppy.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "shoppy.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "shoppy.example", "yields_evidence": true }
+        ]
+      },
+      "expect": {
+        "fetches_used": 3,
+        "budgets_hit_includes": "per_domain_fetches",
+        "branches_stopped_includes": "shoppy.example",
+        "access": "ok"
+      }
+    },
+    {
+      "name": "global max_fetches budget stops harvesting and logs",
+      "budgets": { "max_fetches": 4 },
+      "plan": {
+        "work": [
+          { "type": "fetch", "domain": "a.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "b.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "c.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "d.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "e.example", "yields_evidence": true },
+          { "type": "fetch", "domain": "f.example", "yields_evidence": true }
+        ]
+      },
+      "expect": {
+        "fetches_used": 4,
+        "budgets_hit_includes": "max_fetches",
+        "access": "ok"
+      }
+    },
+    {
+      "name": "per-API call budget stops and logs",
+      "capabilities": { "api": true },
+      "budgets": { "per_api_calls": 2 },
+      "plan": {
+        "work": [
+          { "type": "api", "yields_evidence": true },
+          { "type": "api", "yields_evidence": true },
+          { "type": "api", "yields_evidence": true },
+          { "type": "api", "yields_evidence": true }
+        ]
+      },
+      "expect": {
+        "api_calls": 2,
+        "budgets_hit_includes": "per_api_calls",
+        "access": "ok"
+      }
+    },
+    {
+      "name": "subagent fanout is capped at max_parallel_subagents, never widened",
+      "capabilities": { "subagents": true },
+      "budgets": { "max_parallel_subagents": 6 },
+      "plan": {
+        "subagent_fanout": 9,
+        "work": [ { "type": "fetch", "domain": "a.example", "yields_evidence": true } ]
+      },
+      "expect": {
+        "dispatched_subagents": 6,
+        "budgets_hit_includes": "max_parallel_subagents",
+        "access": "ok"
+      }
+    }
+  ]
+}

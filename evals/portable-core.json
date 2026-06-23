@@ -1,0 +1,24 @@
+{
+  "_doc": "Phase 5 portable-core guarantee — the full method completes with subagents, browser, AND APIs all DISABLED. Enhancement tiers only widen breadth; their absence narrows breadth (recorded in tiers_unavailable) but never breaks the run. Drives tools/orchestration.mjs::orchestrate.",
+  "name": "portable core completes with all enhancement tiers disabled",
+  "capabilities": { "subagents": false, "browser": false, "api": false },
+  "budgets": {},
+  "plan": {
+    "queries": ["over-ear headphones under 300"],
+    "subagent_fanout": 8,
+    "work": [
+      { "type": "fetch", "domain": "professionalreview.example", "yields_evidence": true },
+      { "type": "fetch", "domain": "forum.example", "yields_evidence": true },
+      { "type": "fetch", "domain": "editorial.example", "yields_evidence": true }
+    ]
+  },
+  "expect": {
+    "completes": true,
+    "access": "ok",
+    "degraded": true,
+    "dispatched_subagents": 0,
+    "evidence_gathered": true,
+    "tiers_unavailable": ["subagents", "browser", "api"],
+    "tiers_available_includes": "baseline"
+  }
+}

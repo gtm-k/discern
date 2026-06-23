@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gtm-k/discern/schemas/subagent-output.schema.json",
+  "title": "Subagent Output Envelopes",
+  "description": "Phase 5 contract boundary. Each capability-gated subagent (harvester / teardown / sourcing) returns one of these envelopes. The payload arrays $ref the recommendation-object $defs so the subagent contract and the final-object contract are ONE source of truth (no drift). The orchestrator schema-validates every return and discards (records, never fabricates around) any that fails. agent is a discriminator so a misrouted return cannot be silently accepted.",
+  "$defs": {
+    "universe_delta": {
+      "description": "What this subagent contributed to search_universe — folded back by the orchestrator so the run's counters stay honest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "queries_run": { "type": "array", "items": { "type": "string" } },
+        "sources_hit": { "type": "array", "items": { "type": "string" } },
+        "sources_failed_or_blocked": { "type": "array", "items": { "type": "string" } },
+        "budgets_hit": { "type": "array", "items": { "type": "string" } },
+        "fetches_used": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "harvester_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "candidates"],
+      "properties": {
+        "agent": { "const": "harvester" },
+        "candidates": {
+          "description": "May be empty: an honest harvest that found nothing is still a valid return that carries its search_universe_delta (so the orchestrator sees WHY breadth narrowed). Fabricating a candidate to avoid an empty array is forbidden.",
+          "type": "array",
+          "items": { "$ref": "recommendation-object.schema.json#/$defs/candidate" }
+        },
+        "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
+      }
+    },
+    "teardown_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "shortlist"],
+      "properties": {
+        "agent": { "const": "teardown" },
+        "shortlist": {
+          "description": "May be empty (honest no-result return; never fabricated).",
+          "type": "array",
+          "items": { "$ref": "recommendation-object.schema.json#/$defs/shortlist_item" }
+        },
+        "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
+      }
+    },
+    "sourcing_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "offers"],
+      "properties": {
+        "agent": { "const": "sourcing" },
+        "offers": {
+          "description": "May be empty (honest no-offer return; never fabricated — a sourcing gap is recorded, not filled with a guess).",
+          "type": "array",
+          "items": { "$ref": "recommendation-object.schema.json#/$defs/offer" }
+        },
+        "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
+      }
+    }
+  }
+}

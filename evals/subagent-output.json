@@ -1,0 +1,74 @@
+{
+  "_doc": "Phase 5 subagent contract boundary — every subagent return is schema-validated against schemas/subagent-output.schema.json (which $refs the recommendation-object $defs, so there is one source of truth). Invalid output is REJECTED (fail-closed) and discarded by the orchestrator, never trusted or fabricated around. Valid payloads are built in the test from a real golden fixture so they cannot drift from the live contract; only the rejection cases live here.",
+  "invalid": [
+    {
+      "name": "harvester missing agent discriminator",
+      "kind": "harvester",
+      "payload": { "candidates": [] }
+    },
+    {
+      "name": "harvester wrong agent discriminator",
+      "kind": "harvester",
+      "payload": { "agent": "sourcing", "candidates": [] }
+    },
+    {
+      "name": "harvester candidate missing durable_ids (identity-by-name banned)",
+      "kind": "harvester",
+      "payload": {
+        "agent": "harvester",
+        "candidates": [
+          {
+            "product": "Mystery Widget",
+            "maker": "Acme",
+            "evidence": [
+              {
+                "claim": "great",
+                "source_cluster_id": "c1",
+                "provenance": { "url": "https://x.example", "owner": "x", "access_tier": "fetch", "source_class": "professional_review" },
+                "independence_flag": true,
+                "affiliate_or_sponsored_flag": false,
+                "claim_confidence": 0.6
+              }
+            ],
+            "recurrence_over_clusters": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "teardown shortlist item missing fundamentals_card",
+      "kind": "teardown",
+      "payload": { "agent": "teardown", "shortlist": [ { "product": "Widget A" } ] }
+    },
+    {
+      "name": "sourcing offer missing offer_confidence (uncalibrated)",
+      "kind": "sourcing",
+      "payload": {
+        "agent": "sourcing",
+        "offers": [
+          { "merchant": "Shop", "price": 199, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-23", "verify_at_checkout": true }
+        ]
+      }
+    },
+    {
+      "name": "sourcing offer with extra unknown field (additionalProperties:false bites)",
+      "kind": "sourcing",
+      "payload": {
+        "agent": "sourcing",
+        "offers": [
+          { "merchant": "Shop", "price": 199, "currency": "USD", "provenance_tier": "api", "timestamp": "2026-06-23", "offer_confidence": 0.9, "verify_at_checkout": false, "totally_made_up": "x" }
+        ]
+      }
+    },
+    {
+      "name": "unknown subagent kind fails closed",
+      "kind": "bogus",
+      "payload": { "agent": "bogus" }
+    },
+    {
+      "name": "non-object payload fails closed",
+      "kind": "harvester",
+      "payload": null
+    }
+  ]
+}

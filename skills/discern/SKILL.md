@@ -19,7 +19,30 @@ conforms to `schemas/recommendation-object.schema.json`.
   branches, and confidence semantics (the 0..1 scale). **Binding.**
 - `docs/data-access.md` — the data tiers, policy gate, and fetch budgets you must obey.
 - `docs/render.md` — how the Recommendation Object becomes the human report (offer calibration + verify-at-checkout).
+- `agents/` — the optional capability-gated subagents (harvester / teardown / sourcing) and the contract for using them.
 - `profiles/self.md` (or `profiles/recipients/<name>.md`) — the active preference profile.
+
+## Orchestration & capability tiers (portable core + gated enhancements)
+
+The method below is **portable**: it completes start-to-finish on the baseline tier alone (sequential web
+search + fetch) — the **portable-core guarantee**. When the runtime offers more, use it to widen breadth,
+never as a crutch:
+
+- **Detect capabilities first.** Establish which tiers are usable (`baseline`, `subagents`, `browser`,
+  `api`) per `docs/data-access.md`. Treat any tier you cannot positively confirm as **absent** (fail-closed)
+  and record it in `search_universe.tiers_unavailable`.
+- **Fan out when subagents exist.** Dispatch the `agents/` subagents in parallel — harvester per
+  source-class (step 3), teardown per candidate (step 7), sourcing per pick (step 11) — up to
+  `max_parallel_subagents` (default 6). **Validate every subagent return** against
+  `schemas/subagent-output.schema.json`; discard and record any that fails (never trust or fabricate around
+  malformed output). Fold each return's `search_universe_delta` into the run.
+- **Degrade gracefully.** With subagents/browser/api unavailable, run the same steps **sequentially** — the
+  run still completes; only breadth/latency change, and the narrowing is recorded.
+- **Govern resources, fail closed.** Obey the core + enhancement budgets (`docs/data-access.md`). A hit
+  budget **stops that branch and is recorded** in `search_universe.budgets_hit` — never widen fanout or
+  retry unbounded.
+- **No access → say so.** If no tier is usable, or budgets are exhausted before any credible evidence, emit
+  `INSUFFICIENT_EVIDENCE` / `reason_code=INSUFFICIENT_ACCESS` — never a fabricated pick.
 
 ## The steps
 
