@@ -1,0 +1,10 @@
+node_modules/
+*.log
+.DS_Store
+.remember/tmp/
+.remember/logs/
+.codex-review/
+# local, private preference profiles (only *.example.md are tracked)
+profiles/self.md
+profiles/recipients/*.md
+!profiles/recipients/example.md

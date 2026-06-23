@@ -1,0 +1,51 @@
+{
+  "beneficiary": { "type": "recipient", "name": "Mom", "relationship": "mother", "occasion": "birthday" },
+  "framed_requirements": {
+    "need": "Birthday gift for mother who values practical, quality items",
+    "budget": { "currency": "USD", "max": 120, "target": 80 },
+    "region": "US"
+  },
+  "triage": { "stakes": "medium", "reversibility": "moderate", "commoditization": "mixed", "depth": "standard" },
+  "candidates": [
+    {
+      "product": "Cashmere-blend Wrap",
+      "maker": "MakerWarm",
+      "evidence": [
+        { "claim": "Highly rated cozy wrap", "source_cluster_id": "g1", "provenance": { "url": "https://example.com/wrap", "owner": "OutletG", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.65 }
+      ],
+      "recurrence_over_clusters": 1
+    },
+    {
+      "product": "Handmade Ceramic Pour-over Set",
+      "maker": "MakerCraft",
+      "evidence": [
+        { "claim": "Handmade local pottery, recurring gift pick", "source_cluster_id": "g2", "provenance": { "url": "https://example.com/pourover", "owner": "OutletH", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.70 }
+      ],
+      "recurrence_over_clusters": 2
+    }
+  ],
+  "shortlist": [
+    {
+      "product": "Handmade Ceramic Pour-over Set",
+      "fundamentals_card": { "summary": "Handmade local pottery; value beyond the spec sheet; returnable.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "craft", "finding": "Handmade, supports a local maker" } ] },
+      "counterevidence": []
+    },
+    {
+      "product": "Cashmere-blend Wrap",
+      "fundamentals_card": { "summary": "Soft, but contains wool.", "fundamentals_score": 0.60, "fundamentals": [ { "dimension": "materials", "finding": "Wool blend" } ] },
+      "counterevidence": [ { "kind": "other", "detail": "Recipient has wool sensitivity — recipient hard filter (applies_to_gifts)", "source": "recipient profile" } ]
+    }
+  ],
+  "pick": { "product": "Handmade Ceramic Pour-over Set", "maker": "MakerCraft" },
+  "runners_up": [],
+  "rationale": "The wrap is disqualified by the recipient's wool hard filter (applies_to_gifts=true). The pour-over set is handmade/local (value framework), within the social-norm budget, and returnable — returnability weighted up because recipient taste is inferred.",
+  "value_assessment": { "summary": "Handmade value within the $120 norm.", "value_per_dollar": "high" },
+  "offers": [
+    { "merchant": "ExampleCraft", "price": 85, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "returns": "free returns", "offer_confidence": 0.60, "verify_at_checkout": true }
+  ],
+  "search_universe": { "queries_run": ["thoughtful birthday gift for mom under $120"], "sources_hit": ["OutletG", "OutletH"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 5 },
+  "outcome": "RECOMMEND",
+  "reason_code": "NONE",
+  "confidence_overall": 0.70,
+  "caveats": ["Recipient taste inferred from profile; returnable in case of mismatch."]
+}

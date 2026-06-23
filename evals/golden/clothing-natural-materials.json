@@ -1,0 +1,45 @@
+{
+  "beneficiary": { "type": "self" },
+  "framed_requirements": {
+    "need": "Everyday casual button-up shirts",
+    "must_haves": ["natural / non-synthetic fabric"],
+    "dealbreakers": ["polyester", "acrylic"],
+    "budget": { "currency": "USD", "max": 150 },
+    "region": "US"
+  },
+  "triage": { "stakes": "low", "reversibility": "easy", "commoditization": "mixed", "depth": "standard" },
+  "candidates": [
+    {
+      "product": "Linen Camp Shirt",
+      "maker": "MakerLinen",
+      "evidence": [
+        { "claim": "100% European flax linen, praised for durability", "source_cluster_id": "c1", "provenance": { "url": "https://example.com/linen", "owner": "OutletL", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.70 }
+      ],
+      "recurrence_over_clusters": 1
+    },
+    {
+      "product": "Organic Cotton Oxford",
+      "maker": "MakerCotton",
+      "evidence": [
+        { "claim": "GOTS organic cotton, recurring pick in basics guides", "source_cluster_id": "c2", "provenance": { "url": "https://example.com/cotton", "owner": "OutletC", "access_tier": "fetch" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.75 }
+      ],
+      "recurrence_over_clusters": 2
+    }
+  ],
+  "shortlist": [
+    { "product": "Organic Cotton Oxford", "fundamentals_card": { "summary": "GOTS organic cotton, sturdy weave, repairable.", "fundamentals_score": 0.78, "fundamentals": [ { "dimension": "materials", "finding": "GOTS organic cotton" } ] } },
+    { "product": "Linen Camp Shirt", "fundamentals_card": { "summary": "Breathable linen, fewer colorways.", "fundamentals_score": 0.72, "fundamentals": [ { "dimension": "materials", "finding": "European flax linen" } ] } }
+  ],
+  "pick": { "product": "Organic Cotton Oxford", "maker": "MakerCotton" },
+  "runners_up": [ { "product": "Linen Camp Shirt", "maker": "MakerLinen" } ],
+  "rationale": "Both clear the natural-materials hard filter; the cotton oxford recurs across more independent clusters and scores higher on fundamentals (weave, repairability).",
+  "value_assessment": { "summary": "Good value under $150; natural fabric supports longevity.", "value_per_dollar": "high" },
+  "offers": [
+    { "merchant": "ExampleApparel", "price": 79, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "returns": "30-day", "offer_confidence": 0.55, "verify_at_checkout": true }
+  ],
+  "search_universe": { "queries_run": ["best organic cotton oxford shirt"], "sources_hit": ["OutletL", "OutletC"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 4 },
+  "outcome": "RECOMMEND_WITH_CAVEATS",
+  "reason_code": "NONE",
+  "confidence_overall": 0.70,
+  "caveats": ["Apparel has fewer independent reviews than electronics; confidence moderate."]
+}

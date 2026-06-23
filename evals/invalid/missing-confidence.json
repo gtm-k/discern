@@ -1,0 +1,25 @@
+{
+  "beneficiary": { "type": "self" },
+  "framed_requirements": { "need": "invalid fixture — evidence missing claim_confidence" },
+  "triage": { "stakes": "low", "depth": "light" },
+  "candidates": [
+    {
+      "product": "P",
+      "maker": "M",
+      "evidence": [
+        {
+          "claim": "a claim with no confidence value",
+          "source_cluster_id": "x",
+          "provenance": { "url": "https://example.com", "owner": "O", "access_tier": "fetch" },
+          "independence_flag": true,
+          "affiliate_or_sponsored_flag": false
+        }
+      ],
+      "recurrence_over_clusters": 1
+    }
+  ],
+  "search_universe": { "queries_run": ["q"], "sources_hit": ["O"], "fetches_used": 1 },
+  "outcome": "INSUFFICIENT_EVIDENCE",
+  "reason_code": "THIN_EVIDENCE",
+  "confidence_overall": 0.10
+}

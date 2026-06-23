@@ -1,0 +1,110 @@
+{
+  "beneficiary": { "type": "self" },
+  "framed_requirements": {
+    "need": "Over-ear noise-cancelling headphones for travel and focus",
+    "must_haves": ["effective ANC", "comfortable for long wear"],
+    "nice_to_haves": ["multipoint Bluetooth"],
+    "budget": { "currency": "USD", "max": 350, "target": 250 },
+    "region": "US"
+  },
+  "triage": { "stakes": "medium", "reversibility": "easy", "commoditization": "differentiated", "depth": "standard", "safety_relevant": false },
+  "candidates": [
+    {
+      "product": "Sony WH-1000XM5",
+      "maker": "Sony",
+      "durable_ids": { "model_no": "WH-1000XM5" },
+      "category_taxonomy": "electronics/audio/headphones/over-ear-anc",
+      "evidence": [
+        {
+          "claim": "Top-ranked ANC over-ear across multiple independent roundups",
+          "source_cluster_id": "cluster-pro-a",
+          "provenance": { "url": "https://example.com/review-a", "owner": "ReviewOutletA", "date": "2026-01", "access_tier": "fetch", "extraction_method": "article" },
+          "independence_flag": true,
+          "affiliate_or_sponsored_flag": false,
+          "claim_confidence": 0.85
+        },
+        {
+          "claim": "Praised for ANC and comfort by community",
+          "source_cluster_id": "cluster-forum-a",
+          "provenance": { "url": "https://example.com/forum", "owner": "ForumA", "access_tier": "fetch" },
+          "independence_flag": true,
+          "affiliate_or_sponsored_flag": false,
+          "claim_confidence": 0.70
+        }
+      ],
+      "recurrence_over_clusters": 2
+    },
+    {
+      "product": "Bose QuietComfort Ultra",
+      "maker": "Bose",
+      "durable_ids": { "model_no": "QC-Ultra" },
+      "evidence": [
+        {
+          "claim": "Strong ANC, slightly better comfort per some reviewers",
+          "source_cluster_id": "cluster-pro-b",
+          "provenance": { "url": "https://example.com/review-b", "owner": "ReviewOutletB", "date": "2026-02", "access_tier": "fetch", "extraction_method": "article" },
+          "independence_flag": true,
+          "affiliate_or_sponsored_flag": false,
+          "claim_confidence": 0.80
+        }
+      ],
+      "recurrence_over_clusters": 1
+    }
+  ],
+  "shortlist": [
+    {
+      "product": "Sony WH-1000XM5",
+      "fundamentals_card": {
+        "summary": "Class-leading ANC processor, light comfortable build, strong multipoint.",
+        "fundamentals_score": 0.86,
+        "fundamentals": [
+          { "dimension": "anc", "finding": "Dual processor + 8 mics; top measured ANC" },
+          { "dimension": "comfort", "finding": "250g, even clamp" }
+        ]
+      },
+      "counterevidence": [
+        { "kind": "defect", "detail": "Non-folding hinge reduces packability", "source": "ReviewOutletA" }
+      ]
+    },
+    {
+      "product": "Bose QuietComfort Ultra",
+      "fundamentals_card": {
+        "summary": "Excellent ANC and immersive mode; pricier, weaker multipoint.",
+        "fundamentals_score": 0.82,
+        "fundamentals": [
+          { "dimension": "anc", "finding": "Top-tier ANC, slightly behind on multipoint" }
+        ]
+      }
+    }
+  ],
+  "pick": { "product": "Sony WH-1000XM5", "maker": "Sony" },
+  "runners_up": [ { "product": "Bose QuietComfort Ultra", "maker": "Bose" } ],
+  "rationale": "Recurs across the most independent clusters AND leads on fundamentals (ANC processor, comfort, multipoint). Clears the $350 budget with room.",
+  "value_assessment": { "summary": "Best value-per-dollar at ~$300; strong longevity and resale.", "value_per_dollar": "high" },
+  "offers": [
+    {
+      "merchant": "ExampleStore",
+      "price": 298,
+      "currency": "USD",
+      "region": "US",
+      "provenance_tier": "fetch",
+      "timestamp": "2026-06-22",
+      "returns": "30-day",
+      "warranty": "1-year",
+      "offer_confidence": 0.60,
+      "verify_at_checkout": true
+    }
+  ],
+  "search_universe": {
+    "queries_run": ["best over-ear ANC headphones 2026", "WH-1000XM5 vs QC Ultra"],
+    "sources_hit": ["ReviewOutletA", "ReviewOutletB", "ForumA"],
+    "sources_failed_or_blocked": [],
+    "tiers_unavailable": ["browser", "api"],
+    "budgets_hit": [],
+    "fetches_used": 7
+  },
+  "outcome": "RECOMMEND",
+  "reason_code": "NONE",
+  "confidence_overall": 0.82,
+  "caveats": ["Prices indicative; verify at checkout."]
+}

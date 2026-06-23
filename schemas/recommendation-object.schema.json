@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gtm-k/discern/schemas/recommendation-object.schema.json",
+  "title": "Recommendation Object",
+  "description": "The central, forward-compatible contract Discern produces. v1 populates the research/recommend fields; Phase 2/3 commerce + authorization fields are reserved (optional) so later phases add consumers, not migrations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["beneficiary", "framed_requirements", "triage", "candidates", "search_universe", "outcome", "confidence_overall"],
+  "properties": {
+    "beneficiary": { "$ref": "#/$defs/beneficiary" },
+    "framed_requirements": { "$ref": "#/$defs/framed_requirements" },
+    "triage": { "$ref": "#/$defs/triage" },
+    "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } },
+    "shortlist": { "type": "array", "items": { "$ref": "#/$defs/shortlist_item" } },
+    "pick": { "$ref": "#/$defs/product_ref" },
+    "runners_up": { "type": "array", "items": { "$ref": "#/$defs/product_ref" } },
+    "rationale": { "type": "string", "minLength": 1 },
+    "value_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "value_per_dollar": { "type": "string" }
+      }
+    },
+    "offers": { "type": "array", "items": { "$ref": "#/$defs/offer" } },
+    "search_universe": { "$ref": "#/$defs/search_universe" },
+    "outcome": { "enum": ["RECOMMEND", "RECOMMEND_WITH_CAVEATS", "INSUFFICIENT_EVIDENCE"] },
+    "reason_code": { "enum": ["NONE", "INSUFFICIENT_ACCESS", "NO_CONSENSUS", "UNSAFE_BRAND_PROXY", "THIN_EVIDENCE"] },
+    "confidence_overall": { "$ref": "#/$defs/confidence" },
+    "caveats": { "type": "array", "items": { "type": "string" } },
+    "authorization_envelope": {
+      "description": "RESERVED for Phase 3 (autonomous purchase). Empty/absent in v1.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spend_cap": { "type": "number" },
+        "currency": { "type": "string" },
+        "allowed_merchants": { "type": "array", "items": { "type": "string" } },
+        "confirmation_policy": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "INSUFFICIENT_EVIDENCE" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["reason_code"],
+        "properties": { "reason_code": { "enum": ["INSUFFICIENT_ACCESS", "NO_CONSENSUS", "UNSAFE_BRAND_PROXY", "THIN_EVIDENCE"] } }
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "enum": ["RECOMMEND", "RECOMMEND_WITH_CAVEATS"] } }, "required": ["outcome"] },
+      "then": { "required": ["pick", "shortlist", "rationale", "value_assessment"] }
+    }
+  ],
+  "$defs": {
+    "confidence": {
+      "description": "Calibrated confidence on a 0..1 scale. Bands (see docs/definitions.md): >=0.8 high, 0.5-0.8 moderate, 0.2-0.5 low, <0.2 negligible. Stale/scraped/blocked sources lower it; it is never silently defaulted high.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "beneficiary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["self", "recipient"] },
+        "name": { "type": "string", "description": "Recipient label (e.g. 'Mom'); required semantics when type=recipient." },
+        "relationship": { "type": "string" },
+        "occasion": { "type": "string" }
+      },
+      "if": { "properties": { "type": { "const": "recipient" } }, "required": ["type"] },
+      "then": { "required": ["name"] }
+    },
+    "framed_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["need"],
+      "properties": {
+        "need": { "type": "string", "minLength": 1 },
+        "must_haves": { "type": "array", "items": { "type": "string" } },
+        "nice_to_haves": { "type": "array", "items": { "type": "string" } },
+        "dealbreakers": { "type": "array", "items": { "type": "string" } },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "currency": { "type": "string" },
+            "max": { "type": "number" },
+            "target": { "type": "number" }
+          }
+        },
+        "region": { "type": "string" }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stakes", "depth"],
+      "properties": {
+        "stakes": { "enum": ["low", "medium", "high"] },
+        "reversibility": { "enum": ["easy", "moderate", "hard"] },
+        "commoditization": { "enum": ["commodity", "mixed", "differentiated"] },
+        "depth": { "enum": ["light", "standard", "deep"] },
+        "safety_relevant": { "type": "boolean" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "owner", "access_tier"],
+      "properties": {
+        "url": { "type": "string" },
+        "owner": { "type": "string", "description": "Publisher / site owner — used for independence clustering." },
+        "date": { "type": "string", "description": "Publish or last-updated date if known." },
+        "access_tier": { "enum": ["search", "fetch", "browser", "api"] },
+        "extraction_method": { "type": "string" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "source_cluster_id", "provenance", "independence_flag", "affiliate_or_sponsored_flag", "claim_confidence"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "source_cluster_id": { "type": "string", "description": "Sources sharing owner/affiliate-network/upstream citation share one cluster id." },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "independence_flag": { "type": "boolean" },
+        "affiliate_or_sponsored_flag": { "type": "boolean" },
+        "claim_confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "durable_ids": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_no": { "type": "string" },
+        "gtin": { "type": "string" },
+        "upc": { "type": "string" },
+        "ean": { "type": "string" },
+        "variant": { "type": "string" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "maker", "evidence", "recurrence_over_clusters"],
+      "properties": {
+        "product": { "type": "string", "minLength": 1 },
+        "maker": { "type": "string", "minLength": 1 },
+        "durable_ids": { "$ref": "#/$defs/durable_ids" },
+        "category_taxonomy": { "type": "string" },
+        "release_date": { "type": "string" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidence" } },
+        "recurrence_over_clusters": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of DISTINCT independent source-clusters endorsing this candidate — not raw page count."
+        }
+      }
+    },
+    "counterevidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "detail"],
+      "properties": {
+        "kind": { "enum": ["recall", "defect", "dissent", "reliability", "other"] },
+        "detail": { "type": "string", "minLength": 1 },
+        "source": { "type": "string" }
+      }
+    },
+    "shortlist_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "fundamentals_card"],
+      "properties": {
+        "product": { "type": "string", "minLength": 1 },
+        "fundamentals_card": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["summary", "fundamentals_score", "fundamentals"],
+          "properties": {
+            "summary": { "type": "string", "minLength": 1 },
+            "fundamentals_score": { "type": "number", "minimum": 0, "maximum": 1, "description": "Substance score; ranking invariant R1 uses this to outrank raw frequency." },
+            "fundamentals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["dimension", "finding"],
+                "properties": {
+                  "dimension": { "type": "string" },
+                  "finding": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "counterevidence": { "type": "array", "items": { "$ref": "#/$defs/counterevidence" } }
+      }
+    },
+    "product_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "maker"],
+      "properties": {
+        "product": { "type": "string", "minLength": 1 },
+        "maker": { "type": "string", "minLength": 1 }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merchant", "price", "currency", "provenance_tier", "timestamp", "offer_confidence", "verify_at_checkout"],
+      "properties": {
+        "merchant": { "type": "string", "minLength": 1 },
+        "price": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string" },
+        "region": { "type": "string" },
+        "provenance_tier": { "enum": ["search", "fetch", "browser", "api"] },
+        "timestamp": { "type": "string" },
+        "returns": { "type": "string" },
+        "warranty": { "type": "string" },
+        "offer_confidence": { "$ref": "#/$defs/confidence" },
+        "verify_at_checkout": { "type": "boolean", "description": "True for any non-authoritative (scraped) price." },
+        "sku_variant": { "type": "string", "description": "RESERVED Phase 2." },
+        "condition": { "type": "string", "description": "RESERVED Phase 2." },
+        "shipping": { "type": "string", "description": "RESERVED Phase 2." },
+        "taxes": { "type": "string", "description": "RESERVED Phase 2." },
+        "delivery_date": { "type": "string", "description": "RESERVED Phase 2." },
+        "stock_status": { "type": "string", "description": "RESERVED Phase 2." },
+        "seller_type": { "type": "string", "description": "RESERVED Phase 2." },
+        "checkout_url": { "type": "string", "description": "RESERVED Phase 2." },
+        "affiliate_link": { "type": "string", "description": "RESERVED Phase 2 (with disclosure)." },
+        "price_history_ref": { "type": "string", "description": "RESERVED Phase 2." }
+      }
+    },
+    "search_universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queries_run", "sources_hit", "fetches_used"],
+      "properties": {
+        "queries_run": { "type": "array", "items": { "type": "string" } },
+        "sources_hit": { "type": "array", "items": { "type": "string" } },
+        "sources_failed_or_blocked": { "type": "array", "items": { "type": "string" } },
+        "tiers_unavailable": { "type": "array", "items": { "type": "string" } },
+        "budgets_hit": { "type": "array", "items": { "type": "string" } },
+        "fetches_used": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

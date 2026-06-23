@@ -1,0 +1,27 @@
+{
+  "beneficiary": { "type": "self" },
+  "framed_requirements": { "need": "Daily magnesium glycinate supplement", "region": "US" },
+  "triage": { "stakes": "medium", "reversibility": "moderate", "commoditization": "mixed", "depth": "standard", "safety_relevant": true },
+  "candidates": [
+    {
+      "product": "BrandX Magnesium Glycinate",
+      "maker": "BrandX",
+      "evidence": [
+        { "claim": "Popular and heavily marketed", "source_cluster_id": "s1", "provenance": { "url": "https://example.com/brandx", "owner": "AffiliateNetA", "access_tier": "fetch" }, "independence_flag": false, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.30 }
+      ],
+      "recurrence_over_clusters": 1
+    }
+  ],
+  "search_universe": {
+    "queries_run": ["best magnesium glycinate supplement"],
+    "sources_hit": ["AffiliateNetA"],
+    "sources_failed_or_blocked": ["independent 3rd-party purity/lab testing (not found)"],
+    "tiers_unavailable": ["api"],
+    "budgets_hit": [],
+    "fetches_used": 6
+  },
+  "outcome": "INSUFFICIENT_EVIDENCE",
+  "reason_code": "UNSAFE_BRAND_PROXY",
+  "confidence_overall": 0.25,
+  "caveats": ["Safety-relevant category: brand reputation is not sufficient and the only evidence is affiliate/sponsored. No independent fundamentals (3rd-party purity/testing) found. Consult a professional."]
+}
