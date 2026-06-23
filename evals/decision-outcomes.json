@@ -120,6 +120,37 @@
           { "product": "RealProduct", "fundamentals_card": { "summary": "Real, joined candidate.", "fundamentals_score": 0.70, "fundamentals": [ { "dimension": "build", "finding": "Solid" } ] } }
         ]
       }
+    },
+    {
+      "name": "three-way-tie",
+      "expect": { "family": "RECOMMEND", "tie": true, "pickNull": true, "tiedProducts": ["BoardX", "BoardY", "BoardZ"] },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "budget mechanical keyboard" },
+        "triage": { "stakes": "low", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "BoardX", "maker": "MakerX", "durable_ids": { "model_no": "X-1" },
+            "evidence": [ { "claim": "Praised across independent reviews", "source_cluster_id": "t1", "provenance": { "url": "https://example.com/x", "owner": "ReviewX", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 2
+          },
+          {
+            "product": "BoardY", "maker": "MakerY", "durable_ids": { "model_no": "Y-1" },
+            "evidence": [ { "claim": "Equally praised across independent reviews", "source_cluster_id": "t2", "provenance": { "url": "https://example.com/y", "owner": "ReviewY", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 2
+          },
+          {
+            "product": "BoardZ", "maker": "MakerZ", "durable_ids": { "model_no": "Z-1" },
+            "evidence": [ { "claim": "Also equally praised across independent reviews", "source_cluster_id": "t3", "provenance": { "url": "https://example.com/z", "owner": "ReviewZ", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "BoardX", "fundamentals_card": { "summary": "Tactile, hot-swap.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "switch", "finding": "Tactile" } ] } },
+          { "product": "BoardY", "fundamentals_card": { "summary": "Tactile, hot-swap.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "switch", "finding": "Tactile" } ] } },
+          { "product": "BoardZ", "fundamentals_card": { "summary": "Tactile, hot-swap.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "switch", "finding": "Tactile" } ] } }
+        ]
+      }
     }
   ]
 }
