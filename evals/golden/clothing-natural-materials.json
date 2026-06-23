@@ -26,15 +26,25 @@
         { "claim": "GOTS organic cotton, recurring pick in basics guides", "source_cluster_id": "c2", "provenance": { "url": "https://example.com/cotton", "owner": "OutletC", "access_tier": "fetch", "source_class": "editorial_roundup" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.75 }
       ],
       "recurrence_over_clusters": 2
+    },
+    {
+      "product": "Poly-Blend Oxford",
+      "maker": "MakerPoly",
+      "durable_ids": { "model_no": "OXF-POLY-01" },
+      "evidence": [
+        { "claim": "Cheap and heavily reviewed, but a polyester/cotton blend", "source_cluster_id": "c3", "provenance": { "url": "https://example.com/poly", "owner": "OutletP", "access_tier": "fetch", "source_class": "editorial_roundup" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.55 }
+      ],
+      "recurrence_over_clusters": 1
     }
   ],
   "shortlist": [
     { "product": "Organic Cotton Oxford", "fundamentals_card": { "summary": "GOTS organic cotton, sturdy weave, repairable.", "fundamentals_score": 0.78, "fundamentals": [ { "dimension": "materials", "finding": "GOTS organic cotton" } ] } },
-    { "product": "Linen Camp Shirt", "fundamentals_card": { "summary": "Breathable linen, fewer colorways.", "fundamentals_score": 0.72, "fundamentals": [ { "dimension": "materials", "finding": "European flax linen" } ] } }
+    { "product": "Linen Camp Shirt", "fundamentals_card": { "summary": "Breathable linen, fewer colorways.", "fundamentals_score": 0.72, "fundamentals": [ { "dimension": "materials", "finding": "European flax linen" } ] } },
+    { "product": "Poly-Blend Oxford", "fundamentals_card": { "summary": "Polyester blend — does not clear the natural-materials filter.", "fundamentals_score": 0.4, "fundamentals": [ { "dimension": "materials", "finding": "Polyester/cotton blend (synthetic)" } ] }, "counterevidence": [ { "kind": "other", "detail": "Excluded — polyester violates the natural-materials dealbreaker (hard filter applied)", "source": "framed_requirements.dealbreakers" } ] }
   ],
   "pick": { "product": "Organic Cotton Oxford", "maker": "MakerCotton", "durable_ids": { "model_no": "OXF-ORG-01" } },
   "runners_up": [ { "product": "Linen Camp Shirt", "maker": "MakerLinen" } ],
-  "rationale": "Both clear the natural-materials hard filter; the cotton oxford recurs across more independent clusters and scores higher on fundamentals (weave, repairability).",
+  "rationale": "The poly-blend option is excluded by the natural-materials dealbreaker (hard filter applied); of the two that clear it, the cotton oxford recurs across more independent clusters and scores higher on fundamentals (weave, repairability).",
   "value_assessment": { "summary": "Good value under $150; natural fabric supports longevity.", "value_per_dollar": "high" },
   "offers": [
     { "merchant": "ExampleApparel", "price": 79, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "returns": "30-day", "offer_confidence": 0.55, "verify_at_checkout": true }

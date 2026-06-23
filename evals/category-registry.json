@@ -1,0 +1,23 @@
+{
+  "_doc": "The category registry: one entry per golden fixture (category). To ACCEPT a new category, add an entry here whose `generalized_rule` note explains how the behavior comes from EXISTING category-neutral rules (rule_refs from evals/rule-catalog.json), not a bespoke per-category patch. The gate (tools/category-gate.mjs) enforces: every golden fixture has an entry; the note is substantive; every rule_ref exists in the catalog; and a non-seed category may only cite rules a SEED already uses. See docs/category-widening.md. `_`-prefixed keys are metadata.",
+  "electronics-headphones.json": {
+    "seed": true,
+    "generalized_rule": "Standard-depth triage; ranked by R1 fundamentals-over-frequency with independence-clustered consensus as the tiebreaker and value-per-dollar framing. The pick is the top of the generic grid, not a headphone-specific routine.",
+    "rule_refs": ["TRIAGE", "R1", "INDEPENDENCE", "PROVENANCE_CONFIDENCE", "VALUE_FRAMEWORK", "OUTCOME_FAMILY"]
+  },
+  "clothing-natural-materials.json": {
+    "seed": true,
+    "generalized_rule": "The natural-materials requirement is enforced by the generic HARD_FILTER dealbreaker mechanism (polyester/acrylic), not clothing-specific logic; R1 + independence pick among the survivors; the thinner apparel review corpus lowers confidence into RECOMMEND_WITH_CAVEATS through the shared outcome engine.",
+    "rule_refs": ["TRIAGE", "HARD_FILTER", "R1", "INDEPENDENCE", "PROVENANCE_CONFIDENCE", "VALUE_FRAMEWORK", "OUTCOME_FAMILY"]
+  },
+  "gift-recipient.json": {
+    "seed": true,
+    "generalized_rule": "The beneficiary switch loads the recipient profile; recipient hard filters (plus self filters marked applies_to_gifts) disqualify; the value framework and gift-branch returnability weighting do the rest — all category-neutral, driven by beneficiary type rather than product kind.",
+    "rule_refs": ["TRIAGE", "BENEFICIARY_SWITCH", "HARD_FILTER", "VALUE_FRAMEWORK", "R1", "OUTCOME_FAMILY"]
+  },
+  "safety-supplement.json": {
+    "seed": true,
+    "generalized_rule": "safety_relevant triggers the SAFETY_OVERRIDE so brand-as-proxy is disabled and independent fundamentals are required; affiliate-only evidence fails the provenance/confidence bar, so the outcome engine returns INSUFFICIENT_EVIDENCE / UNSAFE_BRAND_PROXY. No supplement-specific code.",
+    "rule_refs": ["TRIAGE", "SAFETY_OVERRIDE", "PROVENANCE_CONFIDENCE", "OUTCOME_FAMILY"]
+  }
+}

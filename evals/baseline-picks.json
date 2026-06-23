@@ -1,0 +1,39 @@
+{
+  "_doc": "Regression baseline for the category-widening gate (VISION §3.3, §3.5, §6). For each SEED category it records Discern's outcome/pick AND a coarse quality fingerprint (credible_evidence presence, confidence_band) — the regression anchor: the gate fails npm test if a seed fixture drifts from these (so a seed cannot silently lose evidence quality or collapse confidence while keeping the same pick). Bands are coarse (high>=0.8, moderate>=0.5, low<0.5) to catch regressions without false-firing on minor score changes. Alongside, the 'if we did nothing' contrast: what a generic listicle / LLM-shopping bot would do, the baseline Discern must match or beat (user-judged at G4). `_`-prefixed keys are metadata.",
+  "_baseline_to_beat": "The user's own manual pick, PLUS the honesty gap a generic listicle/LLM-shopping bot leaves open (no provenance, no per-claim/per-offer confidence, no counterevidence, affiliate bias laundered as 'best').",
+  "electronics-headphones.json": {
+    "outcome": "RECOMMEND",
+    "reason_code": "NONE",
+    "pick": "Sony WH-1000XM5",
+    "credible_evidence": true,
+    "confidence_band": "high",
+    "naive_baseline": "A generic listicle bot lands on the same most-recurring model, but presents it with no provenance, no per-claim confidence, and omits the non-folding-hinge counterevidence Discern attaches. Discern matches the pick and closes the honesty gap.",
+    "manual_pick_status": "user-judged at G4"
+  },
+  "clothing-natural-materials.json": {
+    "outcome": "RECOMMEND_WITH_CAVEATS",
+    "reason_code": "NONE",
+    "pick": "Organic Cotton Oxford",
+    "credible_evidence": true,
+    "confidence_band": "moderate",
+    "naive_baseline": "A naive bot ranks by review volume/price and would surface a cheaper poly-blend shirt that violates the user's natural-materials dealbreaker. Discern's hard filter excludes synthetics and honestly flags the thinner apparel evidence as caveats.",
+    "manual_pick_status": "user-judged at G4"
+  },
+  "gift-recipient.json": {
+    "outcome": "RECOMMEND",
+    "reason_code": "NONE",
+    "pick": "Handmade Ceramic Pour-over Set",
+    "credible_evidence": true,
+    "confidence_band": "moderate",
+    "naive_baseline": "A buyer-centric bot ignores the recipient's wool sensitivity and would recommend the cashmere-blend wrap. Discern applies the recipient hard filter (applies_to_gifts) and weights returnability up because taste is inferred.",
+    "manual_pick_status": "user-judged at G4"
+  },
+  "safety-supplement.json": {
+    "outcome": "INSUFFICIENT_EVIDENCE",
+    "reason_code": "UNSAFE_BRAND_PROXY",
+    "credible_evidence": false,
+    "confidence_band": "low",
+    "naive_baseline": "A generic bot recommends the most-marketed brand on affiliate strength alone. Discern refuses to brand-proxy a safety-relevant category without independent fundamentals and returns INSUFFICIENT_EVIDENCE — the single clearest 'beat' over doing nothing.",
+    "manual_pick_status": "user-judged at G4"
+  }
+}

@@ -5,6 +5,7 @@ import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ajv = new Ajv2020({ allErrors: true, strict: false });
@@ -58,6 +59,8 @@ for (const f of profileFiles) {
 // --- Golden fixtures: must VALIDATE + match their expected-outcome manifest entry -------------------
 const expected = JSON.parse(readFileSync(join(root, "evals/expected/manifest.json"), "utf8"));
 const goldenFiles = listFiles("evals/golden", ".json");
+const goldenOutcomes = {}; // basename -> observed {outcome, reason_code, pick} for the category-widening gate
+const goldenRecs = {};     // basename -> full Recommendation Object (for the gate's exhibition + fingerprint)
 for (const f of goldenFiles) {
   checks++;
   let obj;
@@ -71,6 +74,8 @@ for (const f of goldenFiles) {
 
   // Every golden MUST have an explicit expected-outcome assertion in the manifest.
   const name = basename(f);
+  goldenOutcomes[name] = { outcome: obj.outcome, reason_code: obj.reason_code, pick: obj.pick?.product };
+  goldenRecs[name] = obj;
   const exp = expected[name];
   if (!exp) { fail(f, `no expected-outcome entry in evals/expected/manifest.json`); continue; }
   if (obj.outcome !== exp.outcome) fail(f, `outcome ${obj.outcome} != expected ${exp.outcome}`);
@@ -110,10 +115,48 @@ if (goldenFiles.length < 4) fail("coverage", `expected >=4 golden fixtures, foun
 checks++;
 if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, found ${invalidFiles.length}`);
 
+// --- Category-widening gate: enforce the registry/baseline against the REAL fixtures ----------------
+// `npm test` fails if a golden fixture (category) lacks a generalized-rule note, cites a rule outside the
+// catalog, or if a seed category regresses from its recorded baseline. (PREMORTEM Story 3, VISION §3.3.)
+// The bite is proven on synthetic cases in test-logic.mjs; here it runs against the live data.
+{
+  checks++;
+  const readJson = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
+  // A missing/unparseable gate data file is a clean, observable failure — not a stack trace.
+  let catalog, registry, baseline, loadError = null;
+  try {
+    catalog = readJson("evals/rule-catalog.json");
+    registry = readJson("evals/category-registry.json");
+    baseline = readJson("evals/baseline-picks.json");
+  } catch (e) {
+    loadError = e.message;
+  }
+  if (loadError) {
+    fail("category-widening-gate", `cannot load gate data (rule-catalog/category-registry/baseline-picks): ${loadError}`);
+  } else {
+    // Structural anchor resolution; a read error falls to "unresolved" (the safe direction → gate fires).
+    const fileContains = (file, token) => {
+      let text;
+      try { text = existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null; }
+      catch { return false; }
+      return text === null ? false : anchorResolves(text, token, file.endsWith(".mjs"));
+    };
+    const goldenNames = goldenFiles.map((f) => basename(f));
+    try {
+      const gateViolations = categoryGateViolations({
+        goldenNames, registry, catalog, baseline, goldenOutcomes, goldenRecs, fileContains,
+      });
+      for (const gv of gateViolations) fail("category-widening-gate", gv);
+    } catch (e) {
+      fail("category-widening-gate", `gate evaluation crashed (treat as fail): ${e.message}`);
+    }
+  }
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nFAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} checks passed (profiles + golden + invalid fixtures).`);
+console.log(`OK — ${checks} checks passed (profiles + golden + invalid fixtures + category-widening gate).`);

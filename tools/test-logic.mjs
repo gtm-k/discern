@@ -1,6 +1,6 @@
 // Discern Phase 2 logic tests: independence clustering, R1 grid ranking, affiliate down-weighting.
 // Runs via `npm test` (after schema validation). Exits non-zero on any failure.
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clusterSources, distinctClusters, recurrenceByProduct, sourceWeight } from "./cluster.mjs";
@@ -27,6 +27,8 @@ import {
   validateSubagentResult,
   orchestrate,
 } from "./orchestration.mjs";
+import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
+import { liveSmokeViolations } from "./live-smoke-check.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -849,10 +851,155 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `budgets_hit=${JSON.stringify(legitBudget.search_universe.budgets_hit)}, access=${legitBudget.access}`);
 }
 
+// --- Phase 6: integration — downstream contract (renderer consumes EVERY golden with zero drift) ----
+// "A conflict-free merge is not a correct merge": the seam to verify here is Recommendation Object ->
+// rendered report. Every golden path must render cleanly, surface its pick (RECOMMEND family) or its
+// reason + no pick (INSUFFICIENT), and never hit the renderer's malformed-data backstop.
+{
+  const manifest = load("evals/expected/manifest.json");
+  const names = readdirSync(join(root, "evals/golden")).filter((f) => f.endsWith(".json"));
+  expect("integration: golden set present", names.length >= 4, `expected >=4 golden fixtures, got ${names.length}`);
+  for (const name of names) {
+    const rec = load(`evals/golden/${name}`);
+    const report = renderReport(rec);
+    const exp = manifest[name] ?? {};
+    const recommendFamily = rec.outcome === "RECOMMEND" || rec.outcome === "RECOMMEND_WITH_CAVEATS";
+    expect(`integration ${name}: renders a non-empty report`, typeof report === "string" && report.length > 50,
+      `report length ${report?.length}`);
+    expect(`integration ${name}: no malformed-data backstop on a golden fixture`, !report.includes("could not be rendered"),
+      `renderer degraded on a schema-valid golden fixture`);
+    expect(`integration ${name}: no [object Object] drift leak`, !report.includes("[object Object]"),
+      `an object leaked into the rendered report`);
+    expect(`integration ${name}: surfaces the search universe`, report.includes("## Search universe") && report.includes("Queries run:"),
+      `search universe not surfaced`);
+    // Field-level contract: schema-critical content must actually reach the report, not just "no crash".
+    if (rec.framed_requirements?.budget?.max !== undefined)
+      expect(`integration ${name}: surfaces the budget`, report.includes(String(rec.framed_requirements.budget.max)),
+        `budget max ${rec.framed_requirements.budget.max} not rendered`);
+    for (const s of rec.shortlist ?? [])
+      expect(`integration ${name}: shortlist product "${s.product}" appears in the grid`, report.includes(s.product),
+        `shortlist product "${s.product}" missing from the rendered grid`);
+    if (recommendFamily) {
+      if (exp.pick !== undefined)
+        expect(`integration ${name}: presents the expected pick`, report.includes(`## Pick — ${exp.pick}`),
+          `report does not present pick "${exp.pick}"`);
+      else
+        expect(`integration ${name}: RECOMMEND family has an expected pick in the manifest`, false,
+          `manifest entry for '${name}' is missing or has no pick field`);
+    } else {
+      expect(`integration ${name}: insufficient outcome presents NO pick + shows the reason`,
+        !report.includes("## Pick — ") && report.includes(exp.reason_code),
+        `expected reason ${exp.reason_code} and no pick header`);
+    }
+  }
+}
+
+// --- Phase 6: category-widening gate BITES (PREMORTEM Story 3 / VISION §3.3) ------------------------
+// Mirrors evals/invalid/ for the schema: each case proves a malformed category MUST raise >=1 violation,
+// and a well-formed widening raises none. The synthetic anchor resolver honors per-case `present_tokens`.
+{
+  const cases = load("evals/category-gate-cases.json").cases;
+  expect("category-gate: cases fixture is non-trivial", Array.isArray(cases) && cases.length >= 12,
+    `expected >=12 gate cases, got ${cases?.length}`);
+  for (const c of cases) {
+    const present = new Set(c.input.present_tokens ?? []);
+    const fileContains = (_file, token) => present.has(token);
+    const v = categoryGateViolations({ ...c.input, fileContains }); // c.input may carry goldenRecs for exhibition
+    if (c.expect_violation) {
+      expect(`category-gate BITES: ${c.label}`, v.length >= 1,
+        `expected >=1 violation, got none`);
+      if (c.expect_match)
+        expect(`category-gate match: ${c.label}`, v.join(" | ").includes(c.expect_match),
+          `expected a violation containing "${c.expect_match}", got: ${v.join(" | ") || "(none)"}`);
+    } else {
+      expect(`category-gate PASSES: ${c.label}`, v.length === 0,
+        `expected zero violations, got: ${v.join(" | ")}`);
+    }
+  }
+}
+
+// --- Phase 6: live-smoke checker turns an upstream live run into an observable PASS/FAIL --------------
+// The live run hits real search+fetch (manual, at release — see docs/live-smoke.md). This checker enforces
+// the PASS criteria on the produced Recommendation Object so a silently-empty run cannot pass quietly.
+{
+  const credibleEvidence = [{ independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.8 }];
+  const ok = {
+    candidates: [{ product: "P", evidence: credibleEvidence }],
+    search_universe: { queries_run: ["q"], fetches_used: 3, sources_failed_or_blocked: [], budgets_hit: [], tiers_unavailable: ["browser", "api"] },
+    outcome: "RECOMMEND", reason_code: "NONE",
+  };
+  expect("live-smoke PASS: credible evidence + queries + fetches", liveSmokeViolations(ok).length === 0,
+    `expected pass, got: ${liveSmokeViolations(ok).join(" | ")}`);
+
+  const okAccessGap = {
+    candidates: [], outcome: "INSUFFICIENT_EVIDENCE", reason_code: "INSUFFICIENT_ACCESS",
+    search_universe: { queries_run: ["q"], fetches_used: 2, sources_failed_or_blocked: ["retailer API (403)"], budgets_hit: [], tiers_unavailable: [] },
+  };
+  expect("live-smoke PASS: honest INSUFFICIENT_ACCESS with recorded block", liveSmokeViolations(okAccessGap).length === 0,
+    `expected pass, got: ${liveSmokeViolations(okAccessGap).join(" | ")}`);
+
+  const noQueries = { ...ok, search_universe: { ...ok.search_universe, queries_run: [] } };
+  expect("live-smoke FAILS: queries_run is 0", liveSmokeViolations(noQueries).some((s) => /queries_run/.test(s)),
+    `expected a queries_run violation, got: ${liveSmokeViolations(noQueries).join(" | ")}`);
+
+  const noFetches = { ...ok, search_universe: { ...ok.search_universe, fetches_used: 0 } };
+  expect("live-smoke FAILS: fetches_used is 0", liveSmokeViolations(noFetches).some((s) => /fetches_used/.test(s)),
+    `expected a fetches_used violation, got: ${liveSmokeViolations(noFetches).join(" | ")}`);
+
+  const silentEmpty = { candidates: [], outcome: "RECOMMEND", reason_code: "NONE",
+    search_universe: { queries_run: ["q"], fetches_used: 3, sources_failed_or_blocked: [], budgets_hit: [], tiers_unavailable: [] } };
+  expect("live-smoke FAILS: RECOMMEND with no credible evidence (silent empty)",
+    liveSmokeViolations(silentEmpty).some((s) => /silent-empty/.test(s)),
+    `expected a silent-empty violation, got: ${liveSmokeViolations(silentEmpty).join(" | ")}`);
+
+  const unexplainedAccess = { candidates: [], outcome: "INSUFFICIENT_EVIDENCE", reason_code: "INSUFFICIENT_ACCESS",
+    search_universe: { queries_run: ["q"], fetches_used: 2, sources_failed_or_blocked: [], budgets_hit: [], tiers_unavailable: ["api"] } };
+  expect("live-smoke FAILS: INSUFFICIENT_ACCESS with nothing recorded (unexplained)",
+    liveSmokeViolations(unexplainedAccess).some((s) => /unexplained access gap/.test(s)),
+    `expected an unexplained-access violation, got: ${liveSmokeViolations(unexplainedAccess).join(" | ")}`);
+
+  // queries_run of empty strings must NOT satisfy the "universe exercised" check (correctness review #3).
+  const blankQueries = { ...ok, search_universe: { ...ok.search_universe, queries_run: ["", "   "] } };
+  expect("live-smoke FAILS: queries_run of blank strings is not 'exercised'",
+    liveSmokeViolations(blankQueries).some((s) => /queries_run/.test(s)),
+    `expected a queries_run violation, got: ${liveSmokeViolations(blankQueries).join(" | ")}`);
+
+  // A non-array candidates must fail cleanly (return a violation / no credible evidence), never throw (F4).
+  const malformedCandidates = { candidates: "oops", outcome: "RECOMMEND", reason_code: "NONE",
+    search_universe: { queries_run: ["q"], fetches_used: 3, sources_failed_or_blocked: [], budgets_hit: [] } };
+  let threw = false, mv = [];
+  try { mv = liveSmokeViolations(malformedCandidates); } catch { threw = true; }
+  expect("live-smoke: non-array candidates does not throw", threw === false, `liveSmokeViolations threw on non-array candidates`);
+  expect("live-smoke: non-array candidates FAILS as silent-empty", mv.some((s) => /silent-empty/.test(s)),
+    `expected a silent-empty violation, got: ${mv.join(" | ")}`);
+}
+
+// --- Phase 6: structural anchor resolution (Codex HIGH-2 — anchors must not resolve off comments/prose) -
+{
+  const grid = readFileSync(join(root, "tools/grid.mjs"), "utf8");
+  expect("anchor: a real declaration resolves", anchorResolves(grid, "rankCandidates", true) === true,
+    `expected 'export function rankCandidates' to resolve`);
+  expect("anchor: a comment-only mention does NOT resolve",
+    anchorResolves("// rankCandidates is great\nconst x = 1;", "rankCandidates", true) === false,
+    `a comment substring must not resolve a code anchor`);
+  expect("anchor: a call-site mention does NOT resolve",
+    anchorResolves("foo(rankCandidates);", "rankCandidates", true) === false,
+    `a usage substring must not resolve a code anchor`);
+  expect("anchor: a token inside a /* block comment */ does NOT resolve",
+    anchorResolves("/*\nexport function rankCandidates() {}\n*/\nconst x = 1;", "rankCandidates", true) === false,
+    `a declaration buried in a block comment must not resolve a code anchor`);
+  const triage = readFileSync(join(root, "docs/triage.md"), "utf8");
+  expect("anchor: a real markdown heading resolves", anchorResolves(triage, "Depth decision", false) === true,
+    `expected the '## Depth decision' heading to resolve`);
+  expect("anchor: doc prose (no heading) does NOT resolve",
+    anchorResolves("the depth decision is computed elsewhere", "Depth decision", false) === false,
+    `prose without a heading must not resolve a doc anchor`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker).`);

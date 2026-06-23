@@ -1,0 +1,39 @@
+{
+  "_doc": "Canonical CATEGORY-NEUTRAL engine rules. The category-widening gate (tools/category-gate.mjs, docs/category-widening.md) requires every category fixture to cite rules from THIS catalog and a new category to reuse rules an existing seed already relies on — never a bespoke per-category code path. Each rule's `anchor` must resolve STRUCTURALLY: for a .mjs file the token must be a declared identifier (export/function/const/let/class NAME), for a .md file a heading containing the token — a comment or prose mention does NOT resolve. The gate fails if an anchor is dangling, so a rule cannot be invented as a bare string. Keys starting with `_` are metadata and ignored by the gate.",
+  "TRIAGE": {
+    "desc": "Research depth-dial from stakes / reversibility / commoditization (sets how hard Discern works).",
+    "anchor": { "file": "docs/triage.md", "token": "Depth decision" }
+  },
+  "SAFETY_OVERRIDE": {
+    "desc": "safety_relevant disables the brand-as-proxy shortcut and requires independent fundamentals.",
+    "anchor": { "file": "tools/decision.mjs", "token": "SAFETY_FUNDAMENTALS_CLASSES" }
+  },
+  "R1": {
+    "desc": "Ranking invariant R1: fundamentals OUTRANK raw frequency (substance over visibility).",
+    "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" }
+  },
+  "INDEPENDENCE": {
+    "desc": "Independence clustering collapses syndicated/affiliate listicles citing the same upstream to ONE signal.",
+    "anchor": { "file": "tools/cluster.mjs", "token": "clusterSources" }
+  },
+  "PROVENANCE_CONFIDENCE": {
+    "desc": "Provenance->confidence calibration; affiliate/sponsored evidence down-weighted (never zeroed); counterevidence retained.",
+    "anchor": { "file": "tools/decision.mjs", "token": "claimConfidenceViolation" }
+  },
+  "VALUE_FRAMEWORK": {
+    "desc": "Value-per-dollar / value-beyond-spec weighting (handmade-local up, unjustified markup down).",
+    "anchor": { "file": "tools/decision.mjs", "token": "HANDMADE_BONUS" }
+  },
+  "HARD_FILTER": {
+    "desc": "must_haves / dealbreakers / recipient hard filters disqualify candidates before ranking.",
+    "anchor": { "file": "tools/decision.mjs", "token": "applicableHardFilters" }
+  },
+  "BENEFICIARY_SWITCH": {
+    "desc": "self/gift beneficiary toggles the active profile and the gift method branches (returnability, applies_to_gifts transfer).",
+    "anchor": { "file": "tools/decision.mjs", "token": "runBeneficiaryDecision" }
+  },
+  "OUTCOME_FAMILY": {
+    "desc": "Outcome engine: RECOMMEND / RECOMMEND_WITH_CAVEATS / INSUFFICIENT_EVIDENCE with a reason_code.",
+    "anchor": { "file": "tools/decision.mjs", "token": "decideOutcome" }
+  }
+}

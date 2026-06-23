@@ -1,0 +1,231 @@
+{
+  "_doc": "Negative + positive scenarios proving the category-widening gate BITES. test-logic.mjs feeds each case's `input` to categoryGateViolations and asserts: expect_violation=true => >=1 violation (a bad category MUST fail npm test), and if `expect_match` is set the joined violations must contain it; expect_violation=false => zero violations. `present_tokens` drives the synthetic anchor resolver (a token resolves iff listed); `goldenRecs` (optional, per case) supplies fixtures for the rule-exhibition check. This is the widening gate's analogue of evals/invalid/ for the schema. See tools/category-gate.mjs and docs/category-widening.md.",
+  "cases": [
+    {
+      "label": "well-formed widening (seed + new category citing only seed rules) passes",
+      "expect_violation": false,
+      "input": {
+        "goldenNames": ["seed.json", "new.json"],
+        "registry": {
+          "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking and independence clustering; no bespoke path.", "rule_refs": ["R1", "INDEPENDENCE"] },
+          "new.json": { "seed": false, "generalized_rule": "New category reuses the generic R1 ranking only; nothing category-specific.", "rule_refs": ["R1"] }
+        },
+        "catalog": {
+          "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } },
+          "INDEPENDENCE": { "anchor": { "file": "tools/cluster.mjs", "token": "clusterSources" } }
+        },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" }, "new.json": { "outcome": "RECOMMEND", "pick": "Y" } },
+        "present_tokens": ["rankCandidates", "clusterSources"]
+      }
+    },
+    {
+      "label": "metadata (_-prefixed) keys are ignored, not flagged as orphans",
+      "expect_violation": false,
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "_doc": "ignored", "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": ["R1"] } },
+        "catalog": { "_doc": "ignored", "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "_doc": "ignored", "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "category fixture present but absent from registry (no generalized-rule note)",
+      "expect_violation": true,
+      "expect_match": "no entry in category-registry",
+      "input": {
+        "goldenNames": ["seed.json", "orphanfixture.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" }, "orphanfixture.json": { "outcome": "RECOMMEND", "pick": "Z" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "generalized-rule note too thin to be meaningful",
+      "expect_violation": true,
+      "expect_match": "too thin",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "ok", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "category cites no rule_refs (no generalized engine rule claimed)",
+      "expect_violation": true,
+      "expect_match": "cites no rule_refs",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Claims to ride the engine but names no rules at all.", "rule_refs": [] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "category cites a rule not in the catalog (a bespoke per-category patch)",
+      "expect_violation": true,
+      "expect_match": "unknown rule",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Smuggles in a category-specific rule that is not in the catalog.", "rule_refs": ["R1", "HEADPHONE_SPECIAL_CASE"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "non-seed category cites a catalog rule that no seed uses (not yet generalized)",
+      "expect_violation": true,
+      "expect_match": "no seed category uses",
+      "input": {
+        "goldenNames": ["seed.json", "new.json"],
+        "registry": {
+          "seed.json": { "seed": true, "generalized_rule": "Rides R1 only; the seed surface of the engine.", "rule_refs": ["R1"] },
+          "new.json": { "seed": false, "generalized_rule": "Reaches for a rule no seed exercises yet, so it is not proven general.", "rule_refs": ["R1", "INDEPENDENCE"] }
+        },
+        "catalog": {
+          "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } },
+          "INDEPENDENCE": { "anchor": { "file": "tools/cluster.mjs", "token": "clusterSources" } }
+        },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" }, "new.json": { "outcome": "RECOMMEND", "pick": "Y" } },
+        "present_tokens": ["rankCandidates", "clusterSources"]
+      }
+    },
+    {
+      "label": "catalog rule anchor is dangling (rule invented as a bare string, not real engine code)",
+      "expect_violation": true,
+      "expect_match": "anchor unresolved",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides a rule whose anchor does not resolve to any real token.", "rule_refs": ["GHOST_RULE"] } },
+        "catalog": { "GHOST_RULE": { "anchor": { "file": "tools/grid.mjs", "token": "thisTokenDoesNotExist" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "seed category regresses: pick drifts from the recorded baseline",
+      "expect_violation": true,
+      "expect_match": "seed regression",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "OriginalPick" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "DriftedPick" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "registry entry with no matching golden fixture (orphan note)",
+      "expect_violation": true,
+      "expect_match": "no matching golden fixture",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": {
+          "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": ["R1"] },
+          "ghost.json": { "seed": false, "generalized_rule": "Note for a fixture that does not exist on disk.", "rule_refs": ["R1"] }
+        },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "seed missing its baseline entry (regression would be undetectable)",
+      "expect_violation": true,
+      "expect_match": "no baseline entry",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": {},
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "rule_refs is an object not an array (hand-edit typo) is flagged, not crashed",
+      "expect_violation": true,
+      "expect_match": "rule_refs is not an array",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1 fundamentals ranking; no bespoke path here.", "rule_refs": { "R1": true } } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "a golden fixture basename starting with _ is rejected (would evade the metadata filter)",
+      "expect_violation": true,
+      "expect_match": "cannot start with",
+      "input": {
+        "goldenNames": ["_hidden.json"],
+        "registry": { "_hidden.json": { "seed": true, "generalized_rule": "Tries to hide behind the metadata filter.", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": {},
+        "goldenOutcomes": { "_hidden.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "present_tokens": ["rankCandidates"]
+      }
+    },
+    {
+      "label": "category claims a rule its fixture does not exhibit (SAFETY_OVERRIDE without safety_relevant)",
+      "expect_violation": true,
+      "expect_match": "does not exhibit",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Claims the safety override but the fixture is not safety-relevant at all.", "rule_refs": ["SAFETY_OVERRIDE"] } },
+        "catalog": { "SAFETY_OVERRIDE": { "anchor": { "file": "tools/decision.mjs", "token": "SAFETY_FUNDAMENTALS_CLASSES" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenRecs": { "seed.json": { "outcome": "RECOMMEND", "triage": { "depth": "standard", "safety_relevant": false } } },
+        "present_tokens": ["SAFETY_FUNDAMENTALS_CLASSES"]
+      }
+    },
+    {
+      "label": "category claims rules its fixture DOES exhibit (passes exhibition)",
+      "expect_violation": false,
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1 and the beneficiary switch, both exhibited by the fixture.", "rule_refs": ["R1", "BENEFICIARY_SWITCH"] } },
+        "catalog": {
+          "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } },
+          "BENEFICIARY_SWITCH": { "anchor": { "file": "tools/decision.mjs", "token": "runBeneficiaryDecision" } }
+        },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenRecs": { "seed.json": { "outcome": "RECOMMEND", "beneficiary": { "type": "recipient" }, "shortlist": [ { "product": "X", "fundamentals_card": { "fundamentals_score": 0.8 } }, { "product": "Y", "fundamentals_card": { "fundamentals_score": 0.7 } } ] } },
+        "present_tokens": ["rankCandidates", "runBeneficiaryDecision"]
+      }
+    },
+    {
+      "label": "a non-array candidates in the fixture fails cleanly via the credible_evidence fingerprint (no crash)",
+      "expect_violation": true,
+      "expect_match": "credible_evidence",
+      "input": {
+        "goldenNames": ["seed.json"],
+        "registry": { "seed.json": { "seed": true, "generalized_rule": "Rides R1; fixture has a malformed (non-array) candidates field.", "rule_refs": ["R1"] } },
+        "catalog": { "R1": { "anchor": { "file": "tools/grid.mjs", "token": "rankCandidates" } } },
+        "baseline": { "seed.json": { "outcome": "RECOMMEND", "pick": "X", "credible_evidence": true } },
+        "goldenOutcomes": { "seed.json": { "outcome": "RECOMMEND", "pick": "X" } },
+        "goldenRecs": { "seed.json": { "outcome": "RECOMMEND", "candidates": "oops", "shortlist": [ { "product": "X", "fundamentals_card": { "fundamentals_score": 0.8 } }, { "product": "Y", "fundamentals_card": { "fundamentals_score": 0.7 } } ] } },
+        "present_tokens": ["rankCandidates"]
+      }
+    }
+  ]
+}
