@@ -465,6 +465,20 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render r5: throwing accessor does not propagate", !threw && out.length > 0, `renderReport threw on hostile getter`);
 }
 
+// --- Phase 4 review hardening ROUND 6 (currency/region leaf leaks missed by the round-5 sweep) -------
+{
+  const base = load("evals/golden/electronics-headphones.json");
+
+  const objBudCur = structuredClone(base); objBudCur.framed_requirements.budget.currency = {};
+  expect("render r6: object budget.currency not leaked", !/\[object Object\]/.test(renderReport(objBudCur)), `leaked budget.currency`);
+
+  const objRegion = structuredClone(base); objRegion.framed_requirements.region = {};
+  expect("render r6: object region not leaked", !/\[object Object\]/.test(renderReport(objRegion)), `leaked region`);
+
+  const objOfferCur = structuredClone(base); objOfferCur.offers[0].currency = {};
+  expect("render r6: object offer.currency not leaked", !/\[object Object\]/.test(renderReport(objOfferCur)), `leaked offer.currency`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

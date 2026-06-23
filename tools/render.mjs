@@ -96,11 +96,11 @@ function renderBudget(req) {
   const b = req?.budget;
   const bits = [];
   if (b) {
-    const cur = b.currency ? ` ${b.currency}` : "";
+    const cur = b.currency ? ` ${safeStr(b.currency, "")}` : "";
     if (typeof b.max === "number") bits.push(`Budget: up to ${b.max}${cur}${typeof b.target === "number" ? ` (target ${b.target})` : ""}`);
     else if (typeof b.target === "number") bits.push(`Budget: target ${b.target}${cur}`);
   }
-  if (req?.region) bits.push(`Region: ${req.region}`);
+  if (req?.region) bits.push(`Region: ${safeStr(req.region)}`);
   return bits.join(" · ");
 }
 
@@ -164,7 +164,7 @@ function renderOffers(rec, lines, recommendFamily) {
   for (const o of offers) {
     if (!isRecord(o)) { lines.push("- ⚠ malformed offer omitted"); continue; } // never deref a bad element
     const violation = offerConfidenceViolation(o); // renderer runs the SAME check the gate uses.
-    const priceStr = Number.isFinite(o.price) ? `${o.price}${o.currency ? ` ${o.currency}` : ""}` : "price unavailable";
+    const priceStr = Number.isFinite(o.price) ? `${o.price}${o.currency ? ` ${safeStr(o.currency, "")}` : ""}` : "price unavailable";
     const parts = [
       `${safeStr(o.merchant, "<unknown merchant>")} — ${priceStr}`,
       `provenance: ${safeStr(o.provenance_tier, "unknown")}`,
