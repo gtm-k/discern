@@ -61,6 +61,16 @@
       }
     },
     {
+      "name": "empty harvest WITHOUT a delta is rejected (an empty return must say WHY it was empty)",
+      "kind": "harvester",
+      "payload": { "agent": "harvester", "candidates": [] }
+    },
+    {
+      "name": "empty sourcing WITHOUT a delta is rejected",
+      "kind": "sourcing",
+      "payload": { "agent": "sourcing", "offers": [] }
+    },
+    {
       "name": "unknown subagent kind fails closed",
       "kind": "bogus",
       "payload": { "agent": "bogus" }

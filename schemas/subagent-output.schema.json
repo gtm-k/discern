@@ -23,12 +23,18 @@
       "properties": {
         "agent": { "const": "harvester" },
         "candidates": {
-          "description": "May be empty: an honest harvest that found nothing is still a valid return that carries its search_universe_delta (so the orchestrator sees WHY breadth narrowed). Fabricating a candidate to avoid an empty array is forbidden.",
+          "description": "May be empty: an honest harvest that found nothing is still a valid return — but an EMPTY return MUST carry a search_universe_delta (so the orchestrator sees WHY breadth narrowed). Fabricating a candidate to avoid an empty array is forbidden.",
           "type": "array",
           "items": { "$ref": "recommendation-object.schema.json#/$defs/candidate" }
         },
         "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "candidates": { "maxItems": 0 } }, "required": ["candidates"] },
+          "then": { "required": ["search_universe_delta"] }
+        }
+      ]
     },
     "teardown_output": {
       "type": "object",
@@ -37,12 +43,18 @@
       "properties": {
         "agent": { "const": "teardown" },
         "shortlist": {
-          "description": "May be empty (honest no-result return; never fabricated).",
+          "description": "May be empty (honest no-result return; never fabricated). An EMPTY return MUST carry a search_universe_delta so the orchestrator sees why it was empty.",
           "type": "array",
           "items": { "$ref": "recommendation-object.schema.json#/$defs/shortlist_item" }
         },
         "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "shortlist": { "maxItems": 0 } }, "required": ["shortlist"] },
+          "then": { "required": ["search_universe_delta"] }
+        }
+      ]
     },
     "sourcing_output": {
       "type": "object",
@@ -51,12 +63,18 @@
       "properties": {
         "agent": { "const": "sourcing" },
         "offers": {
-          "description": "May be empty (honest no-offer return; never fabricated — a sourcing gap is recorded, not filled with a guess).",
+          "description": "May be empty (honest no-offer return; never fabricated — a sourcing gap is recorded, not filled with a guess). An EMPTY return MUST carry a search_universe_delta.",
           "type": "array",
           "items": { "$ref": "recommendation-object.schema.json#/$defs/offer" }
         },
         "search_universe_delta": { "$ref": "#/$defs/universe_delta" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "offers": { "maxItems": 0 } }, "required": ["offers"] },
+          "then": { "required": ["search_universe_delta"] }
+        }
+      ]
     }
   }
 }

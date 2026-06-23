@@ -679,6 +679,96 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `report missing some of ${JSON.stringify(r.search_universe.tiers_unavailable)}`);
 }
 
+// --- Phase 5 post-code review ROUND 1: ensemble REVISE-CODE (Codex + correctness + silent-failure) ---
+{
+  // C1 (Codex CRITICAL): a non-finite / negative budget must NOT fail OPEN (NaN >= x is always false,
+  // which would silently remove the cap). The governor sanitizes to the default and records invalid_budget.
+  const gNaN = createGovernor({ max_fetches: NaN, per_domain_fetches: Infinity, max_parallel_subagents: -3 });
+  expect("C1: NaN max_fetches falls back to default (no fail-open)", gNaN.config.max_fetches === DEFAULTS.max_fetches,
+    `config.max_fetches=${gNaN.config.max_fetches}`);
+  expect("C1: Infinity per-domain falls back to default", gNaN.config.per_domain_fetches === DEFAULTS.per_domain_fetches,
+    `config.per_domain_fetches=${gNaN.config.per_domain_fetches}`);
+  expect("C1: negative parallel cap falls back to default", gNaN.config.max_parallel_subagents === DEFAULTS.max_parallel_subagents,
+    `config.max_parallel_subagents=${gNaN.config.max_parallel_subagents}`);
+  expect("C1: invalid budgets recorded observably", ["max_fetches", "per_domain_fetches", "max_parallel_subagents"]
+    .every((k) => gNaN.universe.budgets_hit.includes(`invalid_budget:${k}`)),
+    `budgets_hit=${JSON.stringify(gNaN.universe.budgets_hit)}`);
+  // The cap actually bites at the default (Infinity did NOT disable it): the 6th fetch to one domain is denied.
+  const gOpen = createGovernor({ per_domain_fetches: Infinity });
+  let denied = false;
+  for (let i = 0; i < DEFAULTS.per_domain_fetches + 1; i++) if (!gOpen.requestFetch("x.example").allowed) denied = true;
+  expect("C1: Infinity per-domain budget still enforced at the default cap", denied, `cap was removed by Infinity`);
+
+  // C2 (CRITICAL): a zero-evidence run blocked by TIER-UNAVAILABILITY (not budget) must return
+  // INSUFFICIENT_ACCESS, never access:ok with a null outcome (the fabrication path).
+  const apiOnly = orchestrate({ capabilities: { api: false }, plan: { work: [
+    { type: "api", yields_evidence: true }, { type: "api", yields_evidence: true } ] } });
+  expect("C2: api-only work with api off -> insufficient", apiOnly.access === "insufficient" &&
+    apiOnly.reason_code === "INSUFFICIENT_ACCESS", `access=${apiOnly.access}, reason=${apiOnly.reason_code}`);
+  expect("C2: api-tier-unavailable blockage is recorded", apiOnly.branches_stopped.some((b) => /api/.test(b)),
+    `branches_stopped=${JSON.stringify(apiOnly.branches_stopped)}`);
+  // C2b: fetch work must NOT proceed when no fetch-capable tier (baseline+browser both off) is available.
+  const noFetchTier = orchestrate({ capabilities: { baseline: false, subagents: true }, plan: { work: [
+    { type: "fetch", domain: "a.example", yields_evidence: true } ] } });
+  expect("C2b: fetch with no fetch-capable tier gathers no evidence", noFetchTier.evidence_count === 0,
+    `evidence_count=${noFetchTier.evidence_count}`);
+  expect("C2b: fetch with no fetch-capable tier is recorded, not silently honored",
+    noFetchTier.branches_stopped.some((b) => /fetch/.test(b)) || noFetchTier.search_universe.sources_failed_or_blocked.length > 0,
+    `branches_stopped=${JSON.stringify(noFetchTier.branches_stopped)}`);
+  // C2c: a legitimate run that SEARCHED fine but found no evidence (no failures/budgets) is NOT mislabeled
+  // INSUFFICIENT_ACCESS — that is a downstream NO_CONSENSUS/THIN_EVIDENCE call, so access stays ok.
+  const searchedEmpty = orchestrate({ plan: { work: [ { type: "fetch", domain: "ok.example", yields_evidence: false } ] } });
+  expect("C2c: searched-but-empty (no failures) stays access ok", searchedEmpty.access === "ok",
+    `access=${searchedEmpty.access}`);
+
+  // H1 (HIGH): orchestrate must actually VALIDATE subagent returns and FOLD their deltas — the contract
+  // boundary, not prose. An invalid return is discarded + recorded; a valid one's delta is merged.
+  const goodCand = structuredClone(load("evals/golden/electronics-headphones.json").candidates[0]);
+  const ingest = orchestrate({ capabilities: { subagents: true }, plan: {
+    subagents: [
+      { kind: "harvester", payload: { agent: "harvester", candidates: [goodCand],
+        search_universe_delta: { queries_run: ["sub-query-xyz"], sources_hit: ["sub-source-abc"], fetches_used: 2 } } },
+      { kind: "harvester", payload: { agent: "harvester" } }, // invalid: missing candidates
+      { kind: "bogus", payload: { agent: "bogus" } },          // invalid: unknown kind (fail-closed)
+    ],
+  } });
+  expect("H1: valid subagent contributes evidence", ingest.evidence_count > 0, `evidence_count=${ingest.evidence_count}`);
+  expect("H1: valid subagent delta folded (query)", ingest.search_universe.queries_run.includes("sub-query-xyz"),
+    `queries_run=${JSON.stringify(ingest.search_universe.queries_run)}`);
+  expect("H1: valid subagent delta folded (source + fetches)",
+    ingest.search_universe.sources_hit.includes("sub-source-abc") && ingest.search_universe.fetches_used >= 2,
+    `sources_hit=${JSON.stringify(ingest.search_universe.sources_hit)}, fetches_used=${ingest.search_universe.fetches_used}`);
+  expect("H1: invalid subagent returns discarded + recorded (not silent)",
+    ingest.search_universe.sources_failed_or_blocked.filter((s) => /invalid output discarded/i.test(s)).length >= 2,
+    `sources_failed_or_blocked=${JSON.stringify(ingest.search_universe.sources_failed_or_blocked)}`);
+  expect("H1: discarded subagent output is never trusted (only the valid one counted)",
+    ingest.evidence_count === 1, `evidence_count=${ingest.evidence_count}`);
+
+  // M1 (MED): a wanted-but-impossible fan-out (subagents off, fanout > 0) records the magnitude lost,
+  // not a silent no-op indistinguishable from "never wanted subagents".
+  const droppedFan = orchestrate({ capabilities: { subagents: false }, plan: { subagent_fanout: 8,
+    work: [ { type: "fetch", domain: "a.example", yields_evidence: true } ] } });
+  expect("M1: dropped fan-out magnitude recorded", droppedFan.branches_stopped.some((b) => /subagents/.test(b) && /8/.test(b)),
+    `branches_stopped=${JSON.stringify(droppedFan.branches_stopped)}`);
+
+  // M2 (MED): a non-string domain must be a RECORDED failure, never a silent "unknown" success that
+  // consumes/credits real budget.
+  const badDomain = orchestrate({ plan: { work: [
+    { type: "fetch", domain: 42, yields_evidence: true }, { type: "fetch", domain: "", yields_evidence: true } ] } });
+  expect("M2: malformed domain gathers no evidence", badDomain.evidence_count === 0, `evidence_count=${badDomain.evidence_count}`);
+  expect("M2: malformed domain consumes no fetch budget", badDomain.search_universe.fetches_used === 0,
+    `fetches_used=${badDomain.search_universe.fetches_used}`);
+  expect("M2: malformed domain recorded", badDomain.branches_stopped.some((b) => /malformed domain/i.test(b)),
+    `branches_stopped=${JSON.stringify(badDomain.branches_stopped)}`);
+
+  // H2 (HIGH): unknown / malformed work-item types are recorded, not silently dropped.
+  const unknownType = orchestrate({ plan: { work: [ { type: "fetchh", domain: "x.example" }, { nope: 1 }, 7 ] } });
+  expect("H2: unknown work type recorded", unknownType.branches_stopped.some((b) => /unknown work item/i.test(b)),
+    `branches_stopped=${JSON.stringify(unknownType.branches_stopped)}`);
+  expect("H2: non-object work item recorded", unknownType.branches_stopped.some((b) => /malformed work item/i.test(b)),
+    `branches_stopped=${JSON.stringify(unknownType.branches_stopped)}`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

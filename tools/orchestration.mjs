@@ -74,12 +74,33 @@ export function detectTiers(capabilities = {}) {
 }
 
 /**
+ * Build the effective budget config, fail-closed. A non-finite or negative override (NaN, Infinity, -1)
+ * would silently DISABLE a cap — `NaN >= x` is always false, so the `>=` checks below would never fire and
+ * the governor would fail OPEN. Such a value is rejected: it falls back to the default and is recorded as
+ * `invalid_budget:<key>` so the bad config is observable. Unknown keys are ignored (forward-compatible).
+ */
+function sanitizeBudgets(budgets, universe) {
+  const cfg = { ...DEFAULTS };
+  if (budgets && typeof budgets === "object" && !Array.isArray(budgets)) {
+    for (const key of Object.keys(DEFAULTS)) {
+      if (!(key in budgets)) continue;
+      const v = budgets[key];
+      if (Number.isFinite(v) && v >= 0) { cfg[key] = Math.floor(v); continue; }
+      cfg[key] = DEFAULTS[key]; // fail closed to the default cap, never to "no cap"
+      const tag = `invalid_budget:${key}`;
+      if (!universe.budgets_hit.includes(tag)) universe.budgets_hit.push(tag);
+    }
+  }
+  return cfg;
+}
+
+/**
  * Create a fail-closed resource governor over a search_universe. Each request returns {allowed, reason};
  * when a budget is exhausted the request is denied and the budget is recorded ONCE in universe.budgets_hit
  * (deduped). The governor never widens a budget or retries unbounded — exhaustion stops that branch.
  */
 export function createGovernor(budgets = {}, universe = emptyUniverse()) {
-  const cfg = { ...DEFAULTS, ...(budgets && typeof budgets === "object" ? budgets : {}) };
+  const cfg = sanitizeBudgets(budgets, universe);
   const perDomain = new Map();
   let activeSubagents = 0;
   let apiCalls = 0;
@@ -149,6 +170,47 @@ export function validateSubagentResult(kind, payload) {
 
 // --- Orchestration (deterministic simulation the evals drive) --------------------------------------
 
+/** Merge a subagent's honest search_universe_delta into the run universe (dedup arrays; sum fetches). */
+function foldDelta(universe, delta) {
+  if (!delta || typeof delta !== "object" || Array.isArray(delta)) return;
+  for (const k of ["queries_run", "sources_hit", "sources_failed_or_blocked", "budgets_hit"]) {
+    if (!Array.isArray(delta[k])) continue;
+    for (const x of delta[k]) if (typeof x === "string" && !universe[k].includes(x)) universe[k].push(x);
+  }
+  if (Number.isFinite(delta.fetches_used) && delta.fetches_used > 0) universe.fetches_used += Math.floor(delta.fetches_used);
+}
+
+/**
+ * Ingest one subagent return at the contract boundary. Untrusted (LLM-produced) output is schema-validated;
+ * an invalid return is DISCARDED and recorded in sources_failed_or_blocked (never trusted, never fabricated
+ * around). A valid return's delta is folded; the count of credible items it contributed is returned (so the
+ * access gate can tell a productive run from an empty one). An empty-but-valid return contributes 0 but its
+ * delta still records WHY it was empty.
+ * @returns {number} credible items contributed (0 if discarded or empty)
+ */
+function ingestSubagentResult(kind, payload, universe, idx) {
+  const violations = validateSubagentResult(kind, payload);
+  if (violations.length) {
+    universe.sources_failed_or_blocked.push(
+      `subagent ${typeof kind === "string" ? kind : "unknown"} #${idx}: invalid output discarded (${violations.length} violation(s))`);
+    return 0;
+  }
+  foldDelta(universe, payload.search_universe_delta);
+  if (kind === "harvester") return (payload.candidates ?? []).length;
+  if (kind === "teardown") return (payload.shortlist ?? []).length;
+  if (kind === "sourcing") return (payload.offers ?? []).length;
+  return 0;
+}
+
+/** The honest terminal when access is insufficient — never a fabricated pick. */
+function terminalInsufficient(universe, branches_stopped, extra) {
+  return {
+    search_universe: universe, branches_stopped,
+    access: "insufficient", outcome: "INSUFFICIENT_EVIDENCE", reason_code: "INSUFFICIENT_ACCESS",
+    ...extra,
+  };
+}
+
 /**
  * Run the capability-gated orchestration over a plan and report what was reachable within budget. This is
  * the offline-eval model of the live skill's orchestration step: it does not fetch, it decides what WOULD
@@ -171,44 +233,57 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
 
   const degraded = tiers_unavailable.length > 0;
   const branches_stopped = [];
-  const stopped = new Set(); // dedupe branch-stop records by (type:domain)
+  const stopped = new Set(); // dedupe branch-stop records
   const stop = (key) => { if (!stopped.has(key)) { stopped.add(key); branches_stopped.push(key); } };
 
-  const gov = createGovernor(budgets, universe);
+  // No usable tier at all -> honest INSUFFICIENT_ACCESS, never a fabricated pick.
+  if (available.length === 0)
+    return terminalInsufficient(universe, branches_stopped,
+      { evidence_count: 0, api_calls: 0, dispatched_subagents: 0, tiers_available: available, degraded });
+
+  const gov = createGovernor(budgets, universe); // sanitizes budgets (records invalid_budget)
   let evidence_count = 0;
   let api_calls = 0;
   let dispatched_subagents = 0;
+  const canFetch = available.includes("baseline") || available.includes("browser");
 
-  // No usable tier at all -> honest INSUFFICIENT_ACCESS, never a fabricated pick.
-  if (available.length === 0) {
-    return {
-      search_universe: universe, evidence_count, api_calls, dispatched_subagents, branches_stopped,
-      tiers_available: available, access: "insufficient", outcome: "INSUFFICIENT_EVIDENCE",
-      reason_code: "INSUFFICIENT_ACCESS", degraded,
-    };
-  }
-
-  // Parallel fan-out only when the subagents tier is available; the cap bounds ONE concurrent wave —
-  // excess requests are denied + recorded (never widened). Absence degrades to the sequential core below.
-  const fanout = Number.isInteger(p.subagent_fanout) ? p.subagent_fanout : 0;
-  if (available.includes("subagents") && fanout > 0) {
-    for (let i = 0; i < fanout; i++) {
-      if (gov.acquireSubagent().allowed) dispatched_subagents += 1; // do not release: model one wave
+  // Subagent fan-out (only when the subagents tier is available). `plan.subagents` carries explicit returns
+  // that are validated + folded at the boundary; a bare `subagent_fanout` count models dispatch slots with
+  // no modeled returns. The cap bounds ONE concurrent wave — excess is denied + recorded, never widened.
+  let subagentPlan = [];
+  if (Array.isArray(p.subagents)) subagentPlan = p.subagents;
+  else if (Number.isInteger(p.subagent_fanout) && p.subagent_fanout > 0)
+    subagentPlan = Array.from({ length: p.subagent_fanout }, () => null);
+  if (subagentPlan.length > 0) {
+    if (available.includes("subagents")) {
+      let idx = 0;
+      for (const sub of subagentPlan) {
+        if (!gov.acquireSubagent().allowed) continue; // cap reached -> governor recorded budgets_hit
+        dispatched_subagents += 1;
+        if (sub && typeof sub === "object" && sub.payload !== undefined)
+          evidence_count += ingestSubagentResult(sub.kind, sub.payload, universe, idx);
+        idx += 1;
+      }
+    } else {
+      // Wanted parallel breadth but the tier is absent: record the MAGNITUDE lost (not a silent no-op
+      // indistinguishable from "never wanted subagents").
+      stop(`subagents unavailable: ${subagentPlan.length} planned, 0 dispatched`);
     }
   }
 
-  // Walk the work plan through the governor. Fetches use the baseline/browser tiers; api items need the
-  // api tier (absent api tier -> the item is unreachable, recorded as unavailable, never a silent skip).
+  // Walk the work plan through the governor. Fetches need a fetch-capable tier (baseline or browser); api
+  // items need the api tier. Every unreachable / malformed item is RECORDED (never a silent skip).
   for (const item of Array.isArray(p.work) ? p.work : []) {
-    if (!item || typeof item !== "object") continue;
+    if (!item || typeof item !== "object" || Array.isArray(item)) { stop("malformed work item (non-object)"); continue; }
     if (item.type === "fetch") {
-      const domain = typeof item.domain === "string" && item.domain ? item.domain : "unknown";
-      const res = gov.requestFetch(domain);
+      if (typeof item.domain !== "string" || !item.domain) { stop("fetch: malformed domain"); continue; }
+      if (!canFetch) { stop(`fetch:${item.domain} (no fetch-capable tier)`); continue; }
+      const res = gov.requestFetch(item.domain);
       if (res.allowed) {
-        if (!universe.sources_hit.includes(domain)) universe.sources_hit.push(domain);
+        if (!universe.sources_hit.includes(item.domain)) universe.sources_hit.push(item.domain);
         if (item.yields_evidence) evidence_count += 1;
       } else {
-        stop(`fetch:${domain} (${res.reason})`);
+        stop(`fetch:${item.domain} (${res.reason})`);
       }
     } else if (item.type === "api") {
       if (!available.includes("api")) { stop("api (tier unavailable)"); continue; }
@@ -219,18 +294,20 @@ export function orchestrate({ capabilities = {}, budgets = {}, plan = {} } = {})
       } else {
         stop(`api (${res.reason})`);
       }
+    } else {
+      stop(`unknown work item type "${typeof item.type === "string" ? item.type : String(item.type)}"`);
     }
   }
 
-  // Insufficient access also covers "budgets exhausted before ANY credible evidence". A budget hit with
-  // evidence still gathered elsewhere is a stopped branch, not insufficient access (the run proceeds).
-  if (evidence_count === 0 && universe.budgets_hit.length > 0) {
-    return {
-      search_universe: universe, evidence_count, api_calls, dispatched_subagents, branches_stopped,
-      tiers_available: available, access: "insufficient", outcome: "INSUFFICIENT_EVIDENCE",
-      reason_code: "INSUFFICIENT_ACCESS", degraded,
-    };
-  }
+  // Insufficient access: ZERO credible evidence AND access was actually impeded — a real budget exhaustion
+  // (not an invalid_budget config marker), a stopped branch, or a recorded source failure. A run that
+  // searched fine but found nothing (no failures) is NOT insufficient access: that is a downstream
+  // NO_CONSENSUS / THIN_EVIDENCE call, so access stays "ok" and the decision engine decides.
+  const realBudgetExhausted = universe.budgets_hit.some((b) => !b.startsWith("invalid_budget:"));
+  const accessImpeded = realBudgetExhausted || branches_stopped.length > 0 || universe.sources_failed_or_blocked.length > 0;
+  if (evidence_count === 0 && accessImpeded)
+    return terminalInsufficient(universe, branches_stopped,
+      { evidence_count, api_calls, dispatched_subagents, tiers_available: available, degraded });
 
   return {
     search_universe: universe, evidence_count, api_calls, dispatched_subagents, branches_stopped,

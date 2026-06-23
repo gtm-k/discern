@@ -30,6 +30,39 @@
         "evidence_gathered": false,
         "budgets_hit_includes": "max_fetches"
       }
+    },
+    {
+      "name": "api-only work with the api tier disabled -> INSUFFICIENT_ACCESS (tier-unavailability, not budget)",
+      "capabilities": { "subagents": false, "browser": false, "api": false },
+      "plan": {
+        "queries": ["authoritative live price"],
+        "work": [
+          { "type": "api", "yields_evidence": true },
+          { "type": "api", "yields_evidence": true }
+        ]
+      },
+      "expect": {
+        "access": "insufficient",
+        "outcome": "INSUFFICIENT_EVIDENCE",
+        "reason_code": "INSUFFICIENT_ACCESS",
+        "evidence_gathered": false
+      }
+    },
+    {
+      "name": "all work items malformed/unknown-type -> nothing reachable -> INSUFFICIENT_ACCESS",
+      "capabilities": { "subagents": false, "browser": false, "api": false },
+      "plan": {
+        "work": [
+          { "type": "fetchh", "domain": "typo.example", "yields_evidence": true },
+          { "nonsense": true }
+        ]
+      },
+      "expect": {
+        "access": "insufficient",
+        "outcome": "INSUFFICIENT_EVIDENCE",
+        "reason_code": "INSUFFICIENT_ACCESS",
+        "evidence_gathered": false
+      }
     }
   ]
 }
