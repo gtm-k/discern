@@ -41,9 +41,9 @@ preference: `gtin` / `upc` / `ean` (global trade item numbers), else `model_no`,
 
 The schema **requires** `durable_ids` on every candidate. When no real ID can be found, set
 `durable_ids.unresolved = true` with an `unresolved_reason` — this is an explicit, visible gap. An
-unresolved identity **prevents that candidate from reaching the `high` confidence band** (it is capped at
-`moderate`), enforced from Phase 3 by the confidence-calibration check (§6). Identity is never silently
-faked from a product name.
+unresolved identity **prevents that candidate from reaching the `high` confidence band** (any band up to
+`moderate` is permitted; the `high` band is not — there is no floor), enforced from Phase 3 by the
+confidence-calibration check (§6). Identity is never silently faked from a product name.
 
 > **Why cap at `moderate`, not `low` (Phase 3 refinement, supersedes the original "cap at low").**
 > Identity-resolution and evidence-strength are orthogonal axes. Handmade / local / boutique items — the
@@ -107,7 +107,11 @@ is:
 - **missing / non-numeric**, or outside `[0, 1]`;
 - **≥ 0.80 while `affiliate_or_sponsored_flag = true`** — affiliate/sponsored evidence caps at `moderate`;
 - **≥ 0.80 while `independence_flag = false`** — non-independent (cluster-collapsed) evidence cannot be high-band;
-- **≥ 0.80 while the owning candidate's `durable_ids.unresolved = true`** — unresolved identity caps at `moderate` (§3).
+- **≥ 0.80 while the owning candidate's `durable_ids.unresolved = true`** — unresolved identity caps at `moderate` (§3);
+- **≥ 0.80 without a high-band basis** — the `high` band requires multiple independent clusters
+  (`recurrence_over_clusters ≥ 2`) OR a first-party `spec_teardown_manufacturer` source OR
+  `access_tier = api`. A lone single-cluster professional/editorial/forum claim caps at `moderate`, so a
+  heavily-marketed mass-market item cannot ride at high confidence on one source.
 
 `npm test` runs this over every golden fixture (all must pass) and over `evals/confidence-calibration.json`
 (which asserts each rejection actually bites). These are *caps*, not auto-grades: clearing a cap does not

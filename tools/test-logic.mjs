@@ -11,6 +11,7 @@ import {
   confidenceViolations,
   claimConfidenceViolation,
   runBeneficiaryDecision,
+  shortlistJoinViolations,
 } from "./decision.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -95,10 +96,25 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   // The calibration check REJECTS miscalibrated / missing-value claims and ACCEPTS calibrated ones.
   const fx = load("evals/confidence-calibration.json");
   for (const c of fx.cases) {
-    const v = claimConfidenceViolation(c.claim, { unresolved: c.unresolved });
+    const v = claimConfidenceViolation(c.claim, { unresolved: c.unresolved, recurrence: c.recurrence });
     expect(`calibration: ${c.name}`, (v !== null) === c.expect_violation,
       `expected violation=${c.expect_violation}, got ${v === null ? "none" : v}`);
   }
+}
+
+// --- Phase 3: value framework shapes the pick (not just hard filters + fundamentals) ----------------
+{
+  const fx = load("evals/value-framework.json");
+  const withFramework = runBeneficiaryDecision(fx.candidates, { selfProfile: fx.self_profile }, "self");
+  const fundamentalsOnly = runBeneficiaryDecision(fx.candidates, { selfProfile: fx.neutral_profile }, "self");
+  expect("value-framework: framework winner", withFramework.winner === fx.expected.winner_with_framework,
+    `expected ${fx.expected.winner_with_framework}, got ${withFramework.winner}`);
+  expect("value-framework: fundamentals-only winner", fundamentalsOnly.winner === fx.expected.winner_fundamentals_only,
+    `expected ${fx.expected.winner_fundamentals_only}, got ${fundamentalsOnly.winner}`);
+  // The two must DIFFER, else the framework changed nothing (a vacuous pass).
+  expect("value-framework: framework actually flips the winner",
+    withFramework.winner !== fundamentalsOnly.winner,
+    `framework winner ${withFramework.winner} == fundamentals-only winner ${fundamentalsOnly.winner}`);
 }
 
 // --- Phase 3: self-vs-gift switch (observable differences per definitions.md §5) --------------------
@@ -129,7 +145,7 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `self returnabilityApplied=${self.returnabilityApplied}`);
 }
 
-// --- Phase 3: ties surface a judgment call; recalls demote the pick --------------------------------
+// --- Phase 3: ties surface a judgment call; recalls demote; all-recalled & safety-bypass are caught -
 {
   const fx = load("evals/decision-outcomes.json");
   for (const c of fx.cases) {
@@ -137,15 +153,38 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     const p = choosePick(c.rec);
     if (c.expect.family !== undefined)
       expect(`decision ${c.name}: family`, d.family === c.expect.family, `expected ${c.expect.family}, got ${d.family}`);
+    if (c.expect.reason_code !== undefined)
+      expect(`decision ${c.name}: reason_code`, d.reason_code === c.expect.reason_code,
+        `expected ${c.expect.reason_code}, got ${d.reason_code}`);
     if (c.expect.tie !== undefined)
       expect(`decision ${c.name}: tie surfaced`, p.tie === c.expect.tie && d.tie === c.expect.tie,
         `expected tie=${c.expect.tie}, got pick.tie=${p.tie}, outcome.tie=${d.tie}`);
+    if (c.expect.pickNull === true)
+      expect(`decision ${c.name}: no sole pick fabricated`, p.pick === null,
+        `expected pick=null, got ${p.pick && p.pick.product}`);
+    if (c.expect.tiedProducts !== undefined) {
+      const got = p.tiedPicks.map((t) => t.product).sort();
+      const want = [...c.expect.tiedProducts].sort();
+      expect(`decision ${c.name}: tied finalists surfaced`, JSON.stringify(got) === JSON.stringify(want),
+        `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+    }
     if (c.expect.pick !== undefined)
       expect(`decision ${c.name}: pick`, p.pick && p.pick.product === c.expect.pick,
         `expected ${c.expect.pick}, got ${p.pick && p.pick.product}`);
     if (c.expect.pick_not !== undefined)
       expect(`decision ${c.name}: recall demotes pick`, !p.pick || p.pick.product !== c.expect.pick_not,
         `pick must not be ${c.expect.pick_not}, got ${p.pick && p.pick.product}`);
+    if (c.expect.joinViolations !== undefined) {
+      const v = shortlistJoinViolations(c.rec);
+      for (const prod of c.expect.joinViolations)
+        expect(`decision ${c.name}: join violation surfaced (${prod})`, v.some((s) => s.startsWith(prod)),
+          `expected a join violation for ${prod}, got ${JSON.stringify(v)}`);
+    }
+  }
+  // Healthy golden fixtures must have ZERO shortlist-join violations (referential integrity holds).
+  for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient"]) {
+    const v = shortlistJoinViolations(load(`evals/golden/${name}.json`));
+    expect(`join integrity: ${name}`, v.length === 0, `violations: ${v.join("; ")}`);
   }
 }
 

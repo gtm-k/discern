@@ -1,0 +1,21 @@
+{
+  "description": "Value & preference filter applies the active profile's value framework (definitions.md §4), not just hard filters + fundamentals. With prefers_handmade_local + markup_tolerance=low, a handmade/local alternative with slightly lower raw fundamentals must out-rank a higher-fundamentals mass-market item carrying unjustified markup. A fundamentals-only ranking (neutral profile) picks the opposite — proving the framework, not raw score, decides. Logic fixture — consumed by tools/test-logic.mjs.",
+  "self_profile": {
+    "kind": "self",
+    "value_framework": {
+      "principles": ["value != price; value != markup", "handmade or locally-made = value", "reject markup without substance"],
+      "prefers_handmade_local": true,
+      "markup_tolerance": "low"
+    },
+    "hard_filters": []
+  },
+  "neutral_profile": { "kind": "self", "value_framework": { "principles": ["none"] }, "hard_filters": [] },
+  "candidates": [
+    { "product": "Mass-Market Gadget", "fundamentals_score": 0.80, "handmade_local": false, "high_markup": true, "returnable": true },
+    { "product": "Local Artisan Alternative", "fundamentals_score": 0.74, "handmade_local": true, "high_markup": false, "returnable": true }
+  ],
+  "expected": {
+    "winner_with_framework": "Local Artisan Alternative",
+    "winner_fundamentals_only": "Mass-Market Gadget"
+  }
+}

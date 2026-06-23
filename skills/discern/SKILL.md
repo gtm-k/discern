@@ -73,11 +73,17 @@ pick**; lesser counterevidence (defects, dissent, reliability) is surfaced as a 
 
 ### 8. Value & preference filter
 Apply the active profile's hard filters (disqualifying) and value framework: **value ≠ price; value ≠
-markup; handmade/local = value** (`definitions.md §4`). Weighted preferences shape, but don't disqualify.
+markup; handmade/local = value** (`definitions.md §4`). The framework shapes the *ranking*, not just the
+prose — handmade/local moves a candidate up, unjustified markup (under low `markup_tolerance`) moves it
+down — so a strong local maker can out-rank a higher-spec mass-market item. For a gift, the **recipient's**
+value framework applies, not yours. Weighted preferences shape, but don't disqualify.
 
 ### 9. Leader / ties
 Surface the front-runner under invariant R1. A **genuine tie** — the top two equal on *both* fundamentals
-and independent recurrence — is presented as an honest judgment call; never fabricate a winner.
+and independent recurrence — is presented as an honest judgment call: surface the tied co-leaders, do
+**not** emit a single arbitrary `pick`. If every shortlisted candidate is blocked (e.g. all recalled, or
+none can be tied to a durable identity), there is no pick — return `INSUFFICIENT_EVIDENCE`, never a
+recommendation with an empty pick.
 
 ### 10. Price / value gate — LAST
 Only now bring in price. Optimize **value-per-dollar**, not lowest price: a "good enough" option within
@@ -90,8 +96,9 @@ any scraped price is marked `verify_at_checkout`. Emit the Recommendation Object
 - `RECOMMEND` — clear, well-supported pick.
 - `RECOMMEND_WITH_CAVEATS` — a pick plus material caveats (thin reviews, price volatility, etc.).
 - `INSUFFICIENT_EVIDENCE` (+ `reason_code`) — when consensus is absent (`NO_CONSENSUS`), evidence is too
-  thin (`THIN_EVIDENCE`), a safety category lacks fundamentals (`UNSAFE_BRAND_PROXY`), or data access
-  failed (`INSUFFICIENT_ACCESS`). **Prefer this over a confident guess.**
+  thin (`THIN_EVIDENCE`), a safety category's **pick is not itself backed by independent fundamentals**
+  (`UNSAFE_BRAND_PROXY` — a *different* candidate's evidence does not count), or data access failed
+  (`INSUFFICIENT_ACCESS`). **Prefer this over a confident guess.**
 
 ## Honesty rules (non-negotiable)
 - Tag every claim and offer with calibrated `confidence` (0..1; `definitions.md §6`). Never default to high.

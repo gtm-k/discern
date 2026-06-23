@@ -45,7 +45,7 @@
           "provenance": { "url": "https://example.com/review-b", "owner": "ReviewOutletB", "date": "2026-02", "access_tier": "fetch", "source_class": "professional_review", "extraction_method": "article" },
           "independence_flag": true,
           "affiliate_or_sponsored_flag": false,
-          "claim_confidence": 0.80
+          "claim_confidence": 0.79
         }
       ],
       "recurrence_over_clusters": 1
