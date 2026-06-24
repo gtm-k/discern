@@ -1054,6 +1054,27 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("render surfaces angles_swept", rep.includes("Angles swept:") && /requirement/.test(rep), "angles_swept not rendered");
 }
 
+// --- Task A5: bite-case data + validate wiring + golden coverage -----------------------------------
+{
+  const cases = load("evals/coverage-cases.json").cases;
+  expect("coverage cases: >=5", Array.isArray(cases) && cases.length >= 5, `got ${cases?.length}`);
+  for (const c of cases) {
+    const v = coverageViolations(c.input);
+    if (c.expect_violation) expect(`coverage BITES: ${c.label}`, v.length>=1 && (!c.expect_match || v.join(" | ").includes(c.expect_match)), `got ${v.join(" | ")||"(none)"}`);
+    else expect(`coverage PASSES: ${c.label}`, v.length===0, `got ${v.join(" | ")}`);
+  }
+  // real goldens must pass coverage
+  for (const n of readdirSync(join(root,"evals/golden")).filter(f=>f.endsWith(".json")))
+    expect(`coverage real golden ${n}`, coverageViolations(load(`evals/golden/${n}`)).length===0, `${n}: ${coverageViolations(load(`evals/golden/${n}`)).join(" | ")}`);
+  // F3 (Codex): pin real-golden requirementTerms outputs — proves must_haves-only + phrase-exclusion
+  expect("coverage F3: electronics terms = ['anc']", JSON.stringify(requirementTerms(load("evals/golden/electronics-headphones.json").framed_requirements)) === JSON.stringify(["anc"]), "electronics terms wrong");
+  for (const n of ["clothing-natural-materials","gift-recipient","safety-supplement"])
+    expect(`coverage F3: ${n} terms = []`, requirementTerms(load(`evals/golden/${n}.json`).framed_requirements).length===0, `${n} should yield no hard terms`);
+  // F5: each golden's rendered report surfaces angles_swept (actor-observability)
+  for (const n of readdirSync(join(root,"evals/golden")).filter(f=>f.endsWith(".json")))
+    expect(`coverage F5 render ${n}`, renderReport(load(`evals/golden/${n}`)).includes("Angles swept:"), `${n}: angles_swept not in report`);
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

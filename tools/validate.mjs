@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
+import { coverageViolations } from "./coverage.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ajv = new Ajv2020({ allErrors: true, strict: false });
@@ -71,6 +72,9 @@ for (const f of goldenFiles) {
     continue;
   }
   if (!validateRec(obj)) fail(f, `recommendation schema: ${errs(validateRec)}`);
+
+  // Coverage gate: every golden must pass multi-angle coverage enforcement.
+  for (const gv of coverageViolations(obj)) fail("coverage-gate", gv);
 
   // Every golden MUST have an explicit expected-outcome assertion in the manifest.
   const name = basename(f);
