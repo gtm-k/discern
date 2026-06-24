@@ -33,6 +33,8 @@ const (
 	filterView
 )
 
+const colGap = 7 // borders + inter-column padding
+
 var helpStyle = lipgloss.NewStyle().Faint(true)
 
 // Model is the bubbletea model for the viewer. It uses VALUE receivers
@@ -93,7 +95,7 @@ func (m Model) Init() tea.Cmd {
 // the updated model BY VALUE.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
-		m.resize(ws.Width, ws.Height)
+		m = m.resize(ws.Width, ws.Height)
 		return m, nil
 	}
 
@@ -210,7 +212,7 @@ func (m Model) View() string {
 
 // resize sizes the table and viewport to the terminal. Kept simple and
 // defensive against tiny terminals.
-func (m *Model) resize(w, h int) {
+func (m Model) resize(w, h int) Model {
 	m.width = w
 	m.height = h
 	m.ready = true
@@ -229,6 +231,7 @@ func (m *Model) resize(w, h int) {
 	}
 	m.viewport.Width = w
 	m.viewport.Height = vpHeight
+	return m
 }
 
 // columns returns the table columns sized to the given total width. A width of
@@ -241,12 +244,12 @@ func columns(totalWidth int) []table.Column {
 			{Title: "beneficiary", Width: 12},
 			{Title: "outcome", Width: 12},
 			{Title: "pick", Width: 18},
-			{Title: "conf", Width: 6},
+			{Title: "confidence", Width: 10},
 		}
 	}
 	// Distribute width: fixed columns get their share, "need" + "pick" flex.
-	date, ben, out, conf := 16, 12, 12, 6
-	rest := totalWidth - date - ben - out - conf - 7 // padding/borders fudge
+	date, ben, out, conf := 16, 12, 12, 10
+	rest := totalWidth - date - ben - out - conf - colGap // borders + inter-column padding
 	if rest < 20 {
 		rest = 20
 	}
@@ -258,7 +261,7 @@ func columns(totalWidth int) []table.Column {
 		{Title: "beneficiary", Width: ben},
 		{Title: "outcome", Width: out},
 		{Title: "pick", Width: pick},
-		{Title: "conf", Width: conf},
+		{Title: "confidence", Width: conf},
 	}
 }
 

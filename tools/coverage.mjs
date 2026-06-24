@@ -9,7 +9,7 @@ export function requirementTerms(framed) {
   const add = (s) => {
     if (typeof s !== "string") return;
     const acro = s.match(/\b[A-Z]{2,}\b/g);
-    if (acro) { for (const a of acro) out.add(a.toLowerCase()); return; }
+    if (acro) { for (const a of acro) out.add(a.toLowerCase()); return; } // acronym present: the phrase is enforced via the acronym token — no need to also add the full phrase
     const trimmed = s.trim();
     if (/^[A-Za-z0-9-]{4,}$/.test(trimmed)) out.add(trimmed.toLowerCase()); // single atomic word only
   };

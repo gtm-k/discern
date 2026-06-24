@@ -45,9 +45,9 @@ export function recordRun(rec, { storeDir = "store", now } = {}) {
   if (!validateIndex(idx)) throw new Error(`store: index would be invalid: ${(validateIndex.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
   // All validation passed — now write artifacts + index.
   mkdirSync(runs,{recursive:true});
-  writeFileSync(join(runs,id+".json"), JSON.stringify(rec,null,2));
+  writeFileSync(join(runs,id+".json"), JSON.stringify(rec,null,2)+"\n");
   writeFileSync(join(runs,id+".md"), renderReport(rec)+"\n");
-  writeFileSync(idxPath, JSON.stringify(idx,null,2));
+  writeFileSync(idxPath, JSON.stringify(idx,null,2)+"\n");
   return { id };
 }
 
@@ -67,7 +67,7 @@ export function rebuildIndex({ storeDir = "store" } = {}) {
   });
   if (!validateIndex(idx)) throw new Error("store: rebuilt index invalid");
   mkdirSync(storeDir,{recursive:true}); // ensure a missing/custom store dir yields a valid empty index, not ENOENT
-  writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2));
+  writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2)+"\n");
   return { count: idx.length };
 }
 
