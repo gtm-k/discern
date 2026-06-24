@@ -100,3 +100,40 @@ func TestReadReportRejectsTraversal(t *testing.T) {
 		t.Fatalf("safe-but-missing: want read error+empty, got content=%q err=%v", got, err)
 	}
 }
+
+// TestReadReportRejectsSymlink verifies that a symlink INSIDE the store that
+// points OUTSIDE it cannot be used to read the external target. The lexical
+// containment check passes for "runs/evil.md" (no ".." in the path string), so
+// the symlink must be resolved and re-contained before the read.
+func TestReadReportRejectsSymlink(t *testing.T) {
+	store := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(store, "runs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// A secret OUTSIDE the store (parent temp dir), and a symlink inside the
+	// store pointing at it.
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOP SECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(store, "runs", "evil.md")
+	if err := os.Symlink(secret, link); err != nil {
+		// Windows without privilege / unsupported FS — standard Go practice.
+		t.Skip("symlinks unsupported on this platform")
+	}
+
+	// The symlink escape must be blocked: non-nil error AND empty content.
+	if got, err := ReadReport(store, filepath.Join("runs", "evil.md")); err == nil || got != "" {
+		t.Fatalf("symlink escape: want error+empty, got content=%q err=%v", got, err)
+	}
+
+	// Sanity: a real in-store report still reads normally.
+	if err := os.WriteFile(filepath.Join(store, "runs", "ok.md"), []byte("# ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadReport(store, filepath.Join("runs", "ok.md"))
+	if err != nil || got != "# ok" {
+		t.Fatalf("safe in-store path: want %q+nil, got content=%q err=%v", "# ok", got, err)
+	}
+}

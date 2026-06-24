@@ -50,15 +50,44 @@ func ReadReport(dir, mdRel string) (string, error) {
 		return "", fmt.Errorf("report path must be relative: %q", mdRel)
 	}
 	full := filepath.Join(dir, mdRel)
-	rel, err := filepath.Rel(dir, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	// First gate: lexical containment rejects ".."-escaping path strings.
+	if !contained(dir, full) {
 		return "", fmt.Errorf("report path escapes store: %q", mdRel)
 	}
-	b, err := os.ReadFile(full)
+	// Second gate: resolve symlinks and re-verify containment, so a symlink
+	// INSIDE the store cannot redirect the read to a target OUTSIDE it. The
+	// lexical check on "runs/x.md" passes for a symlink (no ".." in the string),
+	// so this resolved-path check is what actually blocks the escape.
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve store dir: %w", err)
+	}
+	realFull, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		// Missing file or broken symlink: nothing to leak. Surface as a normal
+		// read error, not the escape error, so a safe-but-missing path is not
+		// mislabeled as a traversal attempt.
+		return "", fmt.Errorf("read report %q: %w", mdRel, err)
+	}
+	if !contained(realDir, realFull) {
+		return "", fmt.Errorf("report path escapes store (symlink): %q", mdRel)
+	}
+	b, err := os.ReadFile(realFull)
 	if err != nil {
 		return "", fmt.Errorf("read report %q: %w", mdRel, err)
 	}
 	return string(b), nil
+}
+
+// contained reports whether p resolves to base or a descendant of base — i.e.
+// the relative path from base to p does not start with "..". Used for both the
+// lexical gate (on the joined path) and the resolved gate (on EvalSymlinks output).
+func contained(base, p string) bool {
+	rel, err := filepath.Rel(base, p)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // Filter returns entries matching q (case-insensitive substring search across need, category, pick, outcome).
