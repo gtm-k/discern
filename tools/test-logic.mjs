@@ -1133,6 +1133,22 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
       `error did not name bad file: ${err5 && err5.message}`);
     rmSync(d3,{recursive:true,force:true});
   }
+
+  // --- Re-review FIX B: rebuildIndex names the file on a JSON *parse* error too ---
+  // A syntactically broken run (truncated/corrupt) must throw an error that names
+  // the offending file — not a bare "Unexpected token" with no context.
+  {
+    const d4 = mkdtempSync(join(tmpdir(),"discern-store-badjson-"));
+    mkdirSync(join(d4,"runs"),{recursive:true});
+    writeFileSync(join(d4,"runs","20260623T130000Z-good.json"), JSON.stringify(rec,null,2));
+    writeFileSync(join(d4,"runs","bad.json"), "{ not json"); // syntactically invalid
+    let errB = null;
+    try { rebuildIndex({ storeDir: d4 }); } catch (e) { errB = e; }
+    expect("store: rebuildIndex throws on a syntactically invalid run", errB !== null, "expected throw on invalid JSON");
+    expect("store: rebuildIndex JSON-parse error names the offending file", !!errB && /bad\.json/.test(errB.message),
+      `error did not name bad file: ${errB && errB.message}`);
+    rmSync(d4,{recursive:true,force:true});
+  }
 }
 
 // --- Task B4: tracked example store ---------------------------------------------------------------

@@ -55,7 +55,11 @@ export function rebuildIndex({ storeDir = "store" } = {}) {
   const runs = join(storeDir,"runs");
   const files = existsSync(runs) ? readdirSync(runs).filter(f=>f.endsWith(".json")).sort() : []; // id-prefix sorts chronologically
   const idx = files.map(f => {
-    const rec = JSON.parse(readFileSync(join(runs,f),"utf8"));
+    // A syntactically broken run (truncated/corrupt) throws a bare parse error
+    // WITHOUT the filename — wrap it so the operator can find the offending file.
+    let rec;
+    try { rec = JSON.parse(readFileSync(join(runs,f),"utf8")); }
+    catch (e) { throw new Error(`store: refusing to index invalid run ${f}: invalid JSON: ${e.message}`); }
     // Fail-closed (consistent with recordRun): never index a malformed run with
     // default fields — throw, naming the offending file.
     if (!validateRec(rec)) throw new Error(`store: refusing to index invalid run ${f}: ${(validateRec.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
