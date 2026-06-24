@@ -63,6 +63,11 @@ Encoded per profile (`value_framework`), applied at the Value & preference filte
   spec sheet (`prefers_handmade_local`).
 - **hard_filters** are disqualifying; **preferences** are weighted. A `hard_filter` with
   `applies_to_gifts=false` does NOT transfer when the beneficiary is a recipient.
+- **Dealbreaker / hard-filter exclusion** — a candidate violating a framed dealbreaker or profile hard
+  filter carries `counterevidence` of `kind:"dealbreaker"`. The engine (`choosePick`) structurally excludes
+  it from the eligible set (mirrors `kind:"recall"`), and the grid marks it "DISQUALIFIED — dealbreaker".
+  The old convention of using `kind:"other"` with narrative text is superseded; use `kind:"dealbreaker"` for
+  structural exclusion.
 
 ## 5. Gift-specific method branches (beneficiary ≠ self)
 

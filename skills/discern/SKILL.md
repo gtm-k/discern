@@ -115,8 +115,11 @@ materials, genuine unique value propositions. Produce a `fundamentals_card` with
 (0..1 — a measure of substance, not popularity). This score, **not** raw recurrence, drives the ranking
 (invariant R1). A candidate whose `durable_ids.unresolved=true` cannot carry `high` confidence — it is
 capped at `moderate` (`definitions.md §3`). Capture `counterevidence` (recalls, defects, reliability
-problems, credible dissent) — it never disappears. A **recall disqualifies that candidate from being the
-pick**; lesser counterevidence (defects, dissent, reliability) is surfaced as a caveat, not auto-disqualifying.
+problems, credible dissent) — it never disappears. A **recall** or **dealbreaker** disqualifies that
+candidate from being the pick (use `kind:"recall"` or `kind:"dealbreaker"` respectively — the engine
+structurally excludes both from the eligible set; `kind:"dealbreaker"` replaces the old `kind:"other"`
+narrative convention for hard-filter violations); lesser counterevidence (defects, dissent, reliability)
+is surfaced as a caveat, not auto-disqualifying.
 
 ### 8. Value & preference filter
 Apply the active profile's hard filters (disqualifying) and value framework: **value ≠ price; value ≠

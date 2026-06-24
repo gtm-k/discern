@@ -83,6 +83,7 @@ export function rankingModel(rec) {
         fundamentals_score: s.fundamentals_card?.fundamentals_score ?? 0,
         recurrence_over_clusters: cand?.recurrence_over_clusters ?? 0,
         recalled: (s.counterevidence ?? []).some((c) => c.kind === "recall"),
+        disqualified: (s.counterevidence ?? []).some((c) => c.kind === "dealbreaker"),
         joinMissing: !cand,
       };
     });
@@ -93,6 +94,7 @@ export function rankingModel(rec) {
     fundamentals_score: c.fundamentals_score ?? 0,
     recurrence_over_clusters: c.recurrence_over_clusters ?? 0,
     recalled: false,
+    disqualified: false,
     joinMissing: false,
   }));
 }
@@ -120,7 +122,7 @@ export function shortlistJoinViolations(rec) {
  * judgment call honestly (SKILL.md step 9), never inherit an arbitrary array-order winner.
  */
 export function choosePick(rec) {
-  const eligible = rankingModel(rec).filter((m) => !m.recalled && !m.joinMissing);
+  const eligible = rankingModel(rec).filter((m) => !m.recalled && !m.disqualified && !m.joinMissing);
   const ranked = rankCandidates(eligible);
   const [top, second] = ranked;
   const tie = !!(top && second &&

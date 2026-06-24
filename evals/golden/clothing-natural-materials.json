@@ -40,7 +40,7 @@
   "shortlist": [
     { "product": "Organic Cotton Oxford", "fundamentals_card": { "summary": "GOTS organic cotton, sturdy weave, repairable.", "fundamentals_score": 0.78, "fundamentals": [ { "dimension": "materials", "finding": "GOTS organic cotton" } ] } },
     { "product": "Linen Camp Shirt", "fundamentals_card": { "summary": "Breathable linen, fewer colorways.", "fundamentals_score": 0.72, "fundamentals": [ { "dimension": "materials", "finding": "European flax linen" } ] } },
-    { "product": "Poly-Blend Oxford", "fundamentals_card": { "summary": "Polyester blend — does not clear the natural-materials filter.", "fundamentals_score": 0.4, "fundamentals": [ { "dimension": "materials", "finding": "Polyester/cotton blend (synthetic)" } ] }, "counterevidence": [ { "kind": "other", "detail": "Excluded — polyester violates the natural-materials dealbreaker (hard filter applied)", "source": "framed_requirements.dealbreakers" } ] }
+    { "product": "Poly-Blend Oxford", "fundamentals_card": { "summary": "Polyester blend — does not clear the natural-materials filter.", "fundamentals_score": 0.4, "fundamentals": [ { "dimension": "materials", "finding": "Polyester/cotton blend (synthetic)" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Excluded — polyester violates the natural-materials dealbreaker (hard filter applied)", "source": "framed_requirements.dealbreakers" } ] }
   ],
   "pick": { "product": "Organic Cotton Oxford", "maker": "MakerCotton", "durable_ids": { "model_no": "OXF-ORG-01" } },
   "runners_up": [ { "product": "Linen Camp Shirt", "maker": "MakerLinen" } ],

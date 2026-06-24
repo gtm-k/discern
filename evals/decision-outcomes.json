@@ -122,6 +122,56 @@
       }
     },
     {
+      "name": "dealbreaker-blocks-top-fundamentals",
+      "expect": { "family": "RECOMMEND", "tie": false, "pick": "CleanRunnerUp", "pick_not": "TopByDealbreaker" },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "casual shirt, natural materials only", "dealbreakers": ["polyester"] },
+        "triage": { "stakes": "low", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "TopByDealbreaker", "maker": "MakerT", "durable_ids": { "model_no": "DB-TOP-01" },
+            "evidence": [ { "claim": "Best-measured fundamentals across all reviews, but polyester blend", "source_cluster_id": "db1", "provenance": { "url": "https://example.com/db", "owner": "ReviewDB", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 3
+          },
+          {
+            "product": "CleanRunnerUp", "maker": "MakerC", "durable_ids": { "model_no": "DB-CLEAN-01" },
+            "evidence": [ { "claim": "Organic cotton, solid independent endorsements", "source_cluster_id": "db2", "provenance": { "url": "https://example.com/clean", "owner": "ReviewClean", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.75 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "TopByDealbreaker", "fundamentals_card": { "summary": "Highest fundamentals but violates dealbreaker.", "fundamentals_score": 0.91, "fundamentals": [ { "dimension": "fit", "finding": "Top measured fit" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Polyester blend — violates natural-materials dealbreaker (hard filter)", "source": "framed_requirements.dealbreakers" } ] },
+          { "product": "CleanRunnerUp", "fundamentals_card": { "summary": "Natural cotton, no dealbreakers.", "fundamentals_score": 0.75, "fundamentals": [ { "dimension": "materials", "finding": "Organic cotton" } ] }, "counterevidence": [] }
+        ]
+      }
+    },
+    {
+      "name": "all-dealbreakered",
+      "expect": { "family": "INSUFFICIENT_EVIDENCE", "pickNull": true },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "shirt, natural materials", "dealbreakers": ["polyester", "acrylic"] },
+        "triage": { "stakes": "low", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "PolyShirtA", "maker": "MakerPA", "durable_ids": { "model_no": "PA-01" },
+            "evidence": [ { "claim": "Well reviewed but polyester", "source_cluster_id": "da1", "provenance": { "url": "https://example.com/pa", "owner": "ReviewPA", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.75 } ],
+            "recurrence_over_clusters": 2
+          },
+          {
+            "product": "AcrylicShirtB", "maker": "MakerAB", "durable_ids": { "model_no": "AB-01" },
+            "evidence": [ { "claim": "Also well reviewed but acrylic blend", "source_cluster_id": "da2", "provenance": { "url": "https://example.com/ab", "owner": "ReviewAB", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.72 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "PolyShirtA", "fundamentals_card": { "summary": "Polyester — dealbreaker.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "materials", "finding": "Polyester" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Polyester — violates natural-materials dealbreaker", "source": "framed_requirements.dealbreakers" } ] },
+          { "product": "AcrylicShirtB", "fundamentals_card": { "summary": "Acrylic — dealbreaker.", "fundamentals_score": 0.76, "fundamentals": [ { "dimension": "materials", "finding": "Acrylic blend" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Acrylic — violates natural-materials dealbreaker", "source": "framed_requirements.dealbreakers" } ] }
+        ]
+      }
+    },
+    {
       "name": "three-way-tie",
       "expect": { "family": "RECOMMEND", "tie": true, "pickNull": true, "tiedProducts": ["BoardX", "BoardY", "BoardZ"] },
       "rec": {

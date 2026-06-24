@@ -181,7 +181,7 @@
       "additionalProperties": false,
       "required": ["kind", "detail"],
       "properties": {
-        "kind": { "enum": ["recall", "defect", "dissent", "reliability", "other"] },
+        "kind": { "enum": ["recall", "defect", "dissent", "reliability", "dealbreaker", "other"] },
         "detail": { "type": "string", "minLength": 1 },
         "source": { "type": "string" }
       }

@@ -206,6 +206,42 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   }
 }
 
+// --- Phase 3: dealbreaker render marker (structural exclusion surfaced in grid) ----------------------
+{
+  // Build a minimal rec with one dealbreakered shortlist item and verify the grid marks it.
+  const dealbreakerRec = {
+    beneficiary: { type: "self" },
+    framed_requirements: { need: "shirt" },
+    triage: { stakes: "low", depth: "standard", safety_relevant: false },
+    candidates: [
+      { product: "DisqualifiedItem", maker: "MakerD", durable_ids: { model_no: "DQ-01" },
+        evidence: [ { claim: "Good but dealbreakered", source_cluster_id: "dq1",
+          provenance: { url: "https://example.com/dq", owner: "ReviewDQ", access_tier: "fetch", source_class: "professional_review" },
+          independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.78 } ],
+        recurrence_over_clusters: 2 },
+      { product: "CleanItem", maker: "MakerC2", durable_ids: { model_no: "CL-01" },
+        evidence: [ { claim: "Clean, no issues", source_cluster_id: "cl1",
+          provenance: { url: "https://example.com/cl", owner: "ReviewCL", access_tier: "fetch", source_class: "professional_review" },
+          independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.75 } ],
+        recurrence_over_clusters: 2 },
+    ],
+    shortlist: [
+      { product: "DisqualifiedItem", fundamentals_card: { summary: "Top fundamentals but dealbreaker.", fundamentals_score: 0.90, fundamentals: [ { dimension: "build", finding: "Strong" } ] },
+        counterevidence: [ { kind: "dealbreaker", detail: "Violates hard filter", source: "framed_requirements.dealbreakers" } ] },
+      { product: "CleanItem", fundamentals_card: { summary: "Clean item, no counterevidence.", fundamentals_score: 0.70, fundamentals: [ { dimension: "build", finding: "Good" } ] }, counterevidence: [] },
+    ],
+    search_universe: { queries_run: ["shirt"], sources_hit: [], sources_failed_or_blocked: [], tiers_unavailable: [], budgets_hit: [], fetches_used: 1, angles_swept: ["roundup"] },
+    outcome: "RECOMMEND", reason_code: "NONE", confidence_overall: 0.70,
+    pick: { product: "CleanItem", maker: "MakerC2" }, rationale: "CleanItem wins.",
+    value_assessment: { summary: "Good value." },
+  };
+  const dbReport = renderReport(dealbreakerRec);
+  expect("render: dealbreaker grid marker present", dbReport.includes("DISQUALIFIED — dealbreaker"),
+    `grid missing "DISQUALIFIED — dealbreaker" marker:\n${dbReport}`);
+  expect("render: dealbreakered item still appears in grid (visible)", dbReport.includes("DisqualifiedItem"),
+    `dealbreakered item missing from grid entirely`);
+}
+
 // --- Phase 4: offer calibration + verify-at-checkout + rendering (definitions.md §7; docs/render.md) -
 {
   // Real golden offers must all be calibrated: confidence present + in range, scraped -> verify_at_checkout,

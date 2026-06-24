@@ -127,6 +127,7 @@ function renderGrid(rec, lines) {
   ranked.forEach((row, i) => {
     const flags = [];
     if (row.recalled) flags.push("RECALLED — disqualified");
+    if (row.disqualified) flags.push("DISQUALIFIED — dealbreaker");
     if (row.joinMissing) flags.push("identity join failed");
     lines.push(
       `${i + 1}. ${safeStr(row.product, "<unknown>")}${row.maker ? ` by ${safeStr(row.maker)}` : ""} — fundamentals ${safeStr(row.fundamentals_score)} · ` +
