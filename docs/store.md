@@ -111,10 +111,15 @@ UI.
 
 ### Keys
 
-| Key | Action |
-|---|---|
-| `↑` / `↓` | Navigate the run list |
-| `Enter` | Open the selected run (view report) |
-| `Esc` | Back to the list |
-| `/` | Filter runs |
-| `q` | Quit |
+| State | Key | Action |
+|---|---|---|
+| List | `↑` / `↓` | Navigate runs |
+| List | `Enter` | Open selected run (view report) |
+| List | `/` | Enter filter |
+| List | `q` or `Ctrl+C` | Quit |
+| Detail | `↑` / `↓` | Scroll report |
+| Detail | `Esc` or `q` | Back to list |
+| Detail | `Ctrl+C` | Quit |
+| Filter | `type` | Edit filter query |
+| Filter | `Enter` or `Esc` | Apply filter and return to list |
+| Filter | `Ctrl+C` | Quit |
