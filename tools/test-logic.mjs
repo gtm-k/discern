@@ -1037,6 +1037,12 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     "requirement-term check must not be budget-exempt");
 }
 
+// --- Task A4: schema field angles_swept present in search_universe ---------------------------------
+{
+  const s = load("schemas/recommendation-object.schema.json");
+  expect("schema: angles_swept present", !!s.$defs?.search_universe?.properties?.angles_swept || !!s.properties?.search_universe?.properties?.angles_swept, "angles_swept not in schema");
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
