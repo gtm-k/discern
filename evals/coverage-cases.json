@@ -1,0 +1,99 @@
+{
+  "cases": [
+    {
+      "label": "PASS full sweep with requirement reflected",
+      "expect_violation": false,
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup", "requirement", "community"],
+          "queries_run": ["over-ear headphones with LDAC", "best headphones 2026", "reddit ldac picks"],
+          "budgets_hit": []
+        }
+      }
+    },
+    {
+      "label": "FAIL requirement angle not declared and term missing",
+      "expect_violation": true,
+      "expect_match": "not reflected",
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup", "community", "catalog"],
+          "queries_run": ["best headphones 2026", "top picks", "reddit picks"],
+          "budgets_hit": []
+        }
+      }
+    },
+    {
+      "label": "FAIL under-swept budget remaining",
+      "expect_violation": true,
+      "expect_match": "swept 1 distinct",
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup"],
+          "queries_run": ["over-ear headphones with LDAC"],
+          "budgets_hit": []
+        }
+      }
+    },
+    {
+      "label": "PASS under-swept but budget exhausted",
+      "expect_violation": false,
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup"],
+          "queries_run": ["over-ear headphones with LDAC"],
+          "budgets_hit": ["max_fetches"]
+        }
+      }
+    },
+    {
+      "label": "FAIL declares requirement angle but no term in queries",
+      "expect_violation": true,
+      "expect_match": "declaration not backed",
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup", "requirement", "catalog"],
+          "queries_run": ["best headphones 2026", "catalog browse", "top picks"],
+          "budgets_hit": []
+        }
+      }
+    },
+    {
+      "label": "FAIL budget exhausted but requirement term not reflected (not exempt)",
+      "expect_violation": true,
+      "expect_match": "not reflected",
+      "input": {
+        "triage": { "depth": "standard" },
+        "framed_requirements": { "must_haves": ["LDAC codec support"] },
+        "search_universe": {
+          "angles_swept": ["roundup", "community"],
+          "queries_run": ["best headphones 2026", "reddit picks"],
+          "budgets_hit": ["max_fetches"]
+        }
+      }
+    },
+    {
+      "label": "PASS deep sweep 4 angles no must_haves",
+      "expect_violation": false,
+      "input": {
+        "triage": { "depth": "deep" },
+        "framed_requirements": {},
+        "search_universe": {
+          "angles_swept": ["roundup", "community", "catalog", "requirement"],
+          "queries_run": ["best over-ear headphones", "community picks", "catalog browse", "roundup 2026"],
+          "budgets_hit": []
+        }
+      }
+    }
+  ]
+}

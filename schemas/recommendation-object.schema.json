@@ -264,7 +264,12 @@
         "sources_failed_or_blocked": { "type": "array", "items": { "type": "string" } },
         "tiers_unavailable": { "type": "array", "items": { "type": "string" } },
         "budgets_hit": { "type": "array", "items": { "type": "string" } },
-        "fetches_used": { "type": "integer", "minimum": 0 }
+        "fetches_used": { "type": "integer", "minimum": 0 },
+        "angles_swept": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["roundup","requirement","community","catalog"] },
+          "description": "Which category-neutral harvest angles the run swept (coverage; tools/coverage.mjs)."
+        }
       }
     }
   }

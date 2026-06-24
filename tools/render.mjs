@@ -256,6 +256,7 @@ export function renderReport(rec) {
   lines.push(`Tiers unavailable: ${orNone(su.tiers_unavailable)}`);
   lines.push(`Budgets hit: ${orNone(su.budgets_hit)}`);
   lines.push(`Fetches used: ${typeof su.fetches_used === "number" ? su.fetches_used : "n/a"}`);
+  lines.push(`Angles swept: ${orNone(su.angles_swept)}`);
   return lines.join("\n");
   } catch {
     return lines.join("\n") + "\n\n⚠ Part of this report could not be rendered (malformed data).";

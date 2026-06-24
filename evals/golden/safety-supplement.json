@@ -19,7 +19,8 @@
     "sources_failed_or_blocked": ["independent 3rd-party purity/lab testing (not found)"],
     "tiers_unavailable": ["api"],
     "budgets_hit": [],
-    "fetches_used": 6
+    "fetches_used": 6,
+    "angles_swept": ["roundup", "community", "catalog"]
   },
   "outcome": "INSUFFICIENT_EVIDENCE",
   "reason_code": "UNSAFE_BRAND_PROXY",

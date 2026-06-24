@@ -64,6 +64,29 @@ Obey `docs/data-access.md` for every fetch (policy gate + budgets; record everyt
 For each useful item, capture an **evidence** record: the claim, its `provenance` (url, owner, date,
 `access_tier`, `source_class`), and whether it is affiliate/sponsored.
 
+**Multi-angle breadth-first sweep** — *angles* are the **search strategy** (how you query); the
+*source-classes* above are **what you find** within each angle. They are complementary, not competing:
+the angle sweep organizes your queries, and source-class harvesting happens within each angle.
+
+| Angle | What it targets |
+|---|---|
+| `roundup` | Editorial "best of" lists and professional review rankings |
+| `requirement` | Queries keyed on the user's atomic must-have (an all-caps acronym or single-word requirement, e.g. "over-ear headphones with LDAC") |
+| `community` | Forum threads, subreddits, Q&A — unsponsored peer voice |
+| `catalog` | Retailer/maker search — surfaces products not yet reviewed |
+
+**Rules:**
+- Sweep **≥ `minAnglesFor(triage.depth)` distinct angles breadth-first** — issue one query per angle
+  before deepening any single angle. (`light` → 2, `standard` → 3, `deep` → 4; unknown depth → 3.)
+- The **`requirement` angle is mandatory** when `framed_requirements` contains an atomic must-have
+  (an all-caps acronym or a single word ≥ 4 chars). Issue at least one query that includes that term —
+  this is what `coverageViolations` checks in `tools/coverage.mjs`.
+- Record the angles used in **`search_universe.angles_swept`** (the `angles_swept` enum in
+  `schemas/recommendation-object.schema.json`). Only declare an angle you actually ran.
+- If the fetch budget exhausts after an honest breadth-first attempt, record `budgets_hit` (the
+  coverage gate exempts honest exhaustion from the angle-count check, but the requirement-term check
+  is **never** budget-exempt — the requirement angle runs first).
+
 ### 4. Consensus by INDEPENDENT repetition
 This is the core trust signal. Assign every evidence item a `source_cluster_id`: sources that share an
 owner, an affiliate network, or a shared upstream citation are the **same cluster** (see `definitions.md
@@ -132,6 +155,13 @@ confidence band + verify-at-checkout, per-claim confidence, caveats, and the rea
   thin (`THIN_EVIDENCE`), a safety category's **pick is not itself backed by independent fundamentals**
   (`UNSAFE_BRAND_PROXY` — a *different* candidate's evidence does not count), or data access failed
   (`INSUFFICIENT_ACCESS`). **Prefer this over a confident guess.**
+
+### 13. Archive (capability-gated, fail-soft)
+If Node.js and `tools/store.mjs` are available, call `recordRun(rec)` to persist the Recommendation
+Object to `store/`. This archives the run for durable record-keeping and future reference. If the
+capability is unavailable or the archive write fails, do **not** block the recommendation — complete
+and deliver it normally, but note in your summary that the run was not archived. Never fabricate
+a store write or silently skip archiving without saying so.
 
 ## Honesty rules (non-negotiable)
 - Tag every claim with a calibrated `claim_confidence` and every offer with a calibrated `offer_confidence`

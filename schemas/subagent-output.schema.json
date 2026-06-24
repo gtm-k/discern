@@ -17,7 +17,8 @@
           "type": "array",
           "items": { "type": "string", "not": { "pattern": "^invalid_budget:" } }
         },
-        "fetches_used": { "type": "integer", "minimum": 0 }
+        "fetches_used": { "type": "integer", "minimum": 0 },
+        "angles_swept": { "type": "array", "items": { "type": "string", "enum": ["roundup","requirement","community","catalog"] } }
       }
     },
     "harvester_output": {

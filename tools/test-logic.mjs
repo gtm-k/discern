@@ -1,8 +1,9 @@
 // Discern Phase 2 logic tests: independence clustering, R1 grid ranking, affiliate down-weighting.
 // Runs via `npm test` (after schema validation). Exits non-zero on any failure.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { clusterSources, distinctClusters, recurrenceByProduct, sourceWeight } from "./cluster.mjs";
 import { gridWinner } from "./grid.mjs";
 import {
@@ -29,6 +30,7 @@ import {
 } from "./orchestration.mjs";
 import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
 import { liveSmokeViolations } from "./live-smoke-check.mjs";
+import { requirementTerms, minAnglesFor, coverageViolations } from "./coverage.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -996,10 +998,183 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `prose without a heading must not resolve a doc anchor`);
 }
 
+// --- Coverage requirement terms extraction ---------------------------------------------------------
+{
+  const t = requirementTerms({ must_haves: ["LDAC codec support","effective ANC","comfortable for long wear","waterproof"], dealbreakers: ["polyester"] });
+  expect("coverage req: acronyms + single-word, NOT phrases, NOT dealbreakers",
+    t.includes("ldac") && t.includes("anc") && t.includes("waterproof")
+      && !t.includes("polyester")
+      && !t.some(x => ["comfortable","wear","long"].includes(x)),
+    `got ${JSON.stringify(t)}`);
+  expect("coverage req: phrase-only must_have -> empty", requirementTerms({ must_haves:["natural / non-synthetic fabric"] }).length === 0, "phrase must not enforce a term");
+  expect("coverage req: no must_haves -> empty", requirementTerms({ need:"x", dealbreakers:["x"] }).length === 0, "expected []");
+}
+
+// --- Coverage minAnglesFor -------------------------------------------------------------------------
+{
+  expect("coverage minAngles: depths", [["light",2],["standard",3],["deep",4],[undefined,3]].every(([d,n]) => minAnglesFor(d?{depth:d}:{}) === n), "depth->N mapping wrong");
+}
+
+// --- Coverage coverageViolations -------------------------------------------------------------------
+{
+  const su = (over) => ({ triage:{depth:"standard"}, framed_requirements:{must_haves:["LDAC codec support"]},
+    search_universe:{ angles_swept:["roundup","requirement","community"], queries_run:["over-ear headphones with LDAC","best headphones 2026","reddit ldac picks"], budgets_hit:[] }, ...over });
+  expect("coverage PASS: 3 angles + LDAC reflected", coverageViolations(su({})).length === 0, JSON.stringify(coverageViolations(su({}))));
+  expect("coverage FAIL: requirement angle not declared, term missing",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup","community","catalog"], queries_run:["best headphones 2026","top picks","reddit picks"], budgets_hit:[] }})).some(v=>/not reflected.*not declared/.test(v)),
+    "expected requirement-not-declared");
+  expect("coverage FAIL: declares requirement, no term (exactly check 3, not duplicated)",
+    (()=>{ const vs=coverageViolations(su({ search_universe:{ angles_swept:["roundup","requirement","catalog"], queries_run:["best headphones 2026","catalog browse","top picks"], budgets_hit:[] }}));
+      return vs.some(v=>/declaration not backed/.test(v)) && !vs.some(v=>/not declared/.test(v)); })(),
+    "expected exactly declaration-not-backed, no duplicate");
+  expect("coverage FAIL: under-swept, budget remaining",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup"], queries_run:["over-ear headphones with LDAC"], budgets_hit:[] }})).some(v=>/swept 1 distinct/.test(v)),
+    "expected under-swept");
+  expect("coverage PASS: under-swept but budget exhausted exempts angle-count",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup"], queries_run:["over-ear headphones with LDAC"], budgets_hit:["max_fetches"] }})).every(v=>!/swept 1 distinct/.test(v)),
+    "honest exhaustion must exempt under-swept");
+  expect("coverage FAIL: budget exhausted but requirement term still missing (NOT exempt)",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup","community"], queries_run:["best headphones 2026","reddit picks"], budgets_hit:["max_fetches"] }})).some(v=>/not reflected.*not declared/.test(v)),
+    "requirement-term check must not be budget-exempt");
+}
+
+// --- Task A4: schema field angles_swept present in search_universe ---------------------------------
+{
+  const s = load("schemas/recommendation-object.schema.json");
+  expect("schema: angles_swept present", !!s.$defs?.search_universe?.properties?.angles_swept || !!s.properties?.search_universe?.properties?.angles_swept, "angles_swept not in schema");
+}
+
+// --- Task A4b: wire angles_swept end-to-end (orchestration seed/fold + universe_delta + render) ----
+{
+  const u = orchestrate({ capabilities:{}, plan:{ work:[] } }).search_universe;
+  expect("orchestrate seeds angles_swept", Array.isArray(u.angles_swept), `angles_swept not seeded: ${JSON.stringify(u.angles_swept)}`);
+  const folded = orchestrate({ capabilities:{ subagents:true }, plan:{ subagents:[ { kind:"harvester", payload:{ agent:"harvester", candidates:[],
+    search_universe_delta:{ angles_swept:["requirement","community"] } } } ] } }).search_universe;
+  expect("orchestrate folds angles_swept (union)", folded.angles_swept.includes("requirement") && folded.angles_swept.includes("community"), JSON.stringify(folded.angles_swept));
+  const rep = renderReport({ outcome:"RECOMMEND", reason_code:"NONE", pick:{product:"X"}, search_universe:{ queries_run:["q"], sources_hit:[], sources_failed_or_blocked:[], tiers_unavailable:[], budgets_hit:[], fetches_used:1, angles_swept:["roundup","requirement"] } });
+  expect("render surfaces angles_swept", rep.includes("Angles swept:") && /requirement/.test(rep), "angles_swept not rendered");
+}
+
+// --- Task A5: bite-case data + validate wiring + golden coverage -----------------------------------
+{
+  const cases = load("evals/coverage-cases.json").cases;
+  expect("coverage cases: >=5", Array.isArray(cases) && cases.length >= 5, `got ${cases?.length}`);
+  for (const c of cases) {
+    const v = coverageViolations(c.input);
+    if (c.expect_violation) expect(`coverage BITES: ${c.label}`, v.length>=1 && (!c.expect_match || v.join(" | ").includes(c.expect_match)), `got ${v.join(" | ")||"(none)"}`);
+    else expect(`coverage PASSES: ${c.label}`, v.length===0, `got ${v.join(" | ")}`);
+  }
+  // real goldens must pass coverage
+  for (const n of readdirSync(join(root,"evals/golden")).filter(f=>f.endsWith(".json")))
+    expect(`coverage real golden ${n}`, coverageViolations(load(`evals/golden/${n}`)).length===0, `${n}: ${coverageViolations(load(`evals/golden/${n}`)).join(" | ")}`);
+  // F3 (Codex): pin real-golden requirementTerms outputs — proves must_haves-only + phrase-exclusion
+  expect("coverage F3: electronics terms = ['anc']", JSON.stringify(requirementTerms(load("evals/golden/electronics-headphones.json").framed_requirements)) === JSON.stringify(["anc"]), "electronics terms wrong");
+  for (const n of ["clothing-natural-materials","gift-recipient","safety-supplement"])
+    expect(`coverage F3: ${n} terms = []`, requirementTerms(load(`evals/golden/${n}.json`).framed_requirements).length===0, `${n} should yield no hard terms`);
+  // F5: each golden's rendered report surfaces angles_swept (actor-observability)
+  for (const n of readdirSync(join(root,"evals/golden")).filter(f=>f.endsWith(".json")))
+    expect(`coverage F5 render ${n}`, renderReport(load(`evals/golden/${n}`)).includes("Angles swept:"), `${n}: angles_swept not in report`);
+}
+
+// --- Task B1: store-index schema (writer<->viewer contract) ------------------------------------------
+expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-index.schema.json");return s.type==="array"&&!!s.items?.properties?.id;})(), "schema missing/!array");
+
+// --- Task B2: recordRun + id scheme (durable run store) -----------------------------------------------
+{
+  const { recordRun, rebuildIndex } = await import("./store.mjs");
+  const dir = mkdtempSync(join(tmpdir(),"discern-store-"));
+  const rec = load("evals/golden/electronics-headphones.json");
+  const { id } = recordRun(rec, { storeDir: dir, now: "2026-06-23T10:00:00.000Z" });
+  expect("store: writes json+md", existsSync(join(dir,"runs",id+".json")) && existsSync(join(dir,"runs",id+".md")), "artifacts missing");
+  const idx = JSON.parse(readFileSync(join(dir,"index.json"),"utf8"));
+  expect("store: index entry", idx.length===1 && idx[0].pick==="Sony WH-1000XM5" && idx[0].outcome==="RECOMMEND", JSON.stringify(idx));
+  expect("store: id is timestamp+slug", /^20260623T100000Z-/.test(id), id);
+  let threw=false; try { recordRun({outcome:"NONSENSE"}, {storeDir:dir, now:"2026-06-23T10:00:01.000Z"}); } catch { threw=true; }
+  expect("store: rejects invalid rec", threw, "invalid object was stored");
+
+  // --- Task B3: rebuildIndex ---
+  rmSync(join(dir, "index.json"), { force: true });
+  const rebuilt = rebuildIndex({ storeDir: dir });
+  expect("store: rebuildIndex returns {count}", rebuilt.count === 1, `expected count=1, got ${rebuilt.count}`);
+  const rebuiltIdx = JSON.parse(readFileSync(join(dir, "index.json"), "utf8"));
+  expect("store: rebuilt index validates", Array.isArray(rebuiltIdx) && rebuiltIdx.length === 1, `index not valid array`);
+  expect("store: rebuilt index entry preserved", rebuiltIdx[0].id === id && rebuiltIdx[0].pick === "Sony WH-1000XM5" && rebuiltIdx[0].outcome === "RECOMMEND",
+    `entry missing/wrong: ${JSON.stringify(rebuiltIdx[0])}`);
+
+  rmSync(dir,{recursive:true,force:true});
+
+  // --- FIX 3: recordRun validates the assembled index BEFORE any filesystem write (no orphans) ---
+  {
+    const d2 = mkdtempSync(join(tmpdir(),"discern-store-orphan-"));
+    // Pre-write a CORRUPT index so the assembled candidate index fails validation.
+    mkdirSync(join(d2,"runs"),{recursive:true});
+    writeFileSync(join(d2,"index.json"), JSON.stringify([{ bad: true }]));
+    const before = readdirSync(join(d2,"runs"));
+    let threw3 = false;
+    try { recordRun(rec, { storeDir: d2, now: "2026-06-23T11:00:00.000Z" }); } catch { threw3 = true; }
+    expect("store: recordRun throws when assembled index invalid", threw3, "expected throw on corrupt existing index");
+    const after = readdirSync(join(d2,"runs"));
+    expect("store: recordRun writes NO orphan run artifacts on index-validation failure",
+      after.length === before.length, `orphan files created: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+    rmSync(d2,{recursive:true,force:true});
+  }
+
+  // --- FIX 5: rebuildIndex validates every run and throws on a malformed one (naming the file) ---
+  {
+    const d3 = mkdtempSync(join(tmpdir(),"discern-store-rebuild-"));
+    mkdirSync(join(d3,"runs"),{recursive:true});
+    // One valid golden run, one malformed run missing required rec fields.
+    writeFileSync(join(d3,"runs","20260623T120000Z-good.json"), JSON.stringify(rec,null,2));
+    writeFileSync(join(d3,"runs","zzz.json"), JSON.stringify({ outcome: "RECOMMEND" }));
+    let err5 = null;
+    try { rebuildIndex({ storeDir: d3 }); } catch (e) { err5 = e; }
+    expect("store: rebuildIndex throws on a malformed run", err5 !== null, "expected throw on malformed run json");
+    expect("store: rebuildIndex error names the offending file", !!err5 && /zzz\.json/.test(err5.message),
+      `error did not name bad file: ${err5 && err5.message}`);
+    rmSync(d3,{recursive:true,force:true});
+  }
+
+  // --- Re-review FIX B: rebuildIndex names the file on a JSON *parse* error too ---
+  // A syntactically broken run (truncated/corrupt) must throw an error that names
+  // the offending file — not a bare "Unexpected token" with no context.
+  {
+    const d4 = mkdtempSync(join(tmpdir(),"discern-store-badjson-"));
+    mkdirSync(join(d4,"runs"),{recursive:true});
+    writeFileSync(join(d4,"runs","20260623T130000Z-good.json"), JSON.stringify(rec,null,2));
+    writeFileSync(join(d4,"runs","bad.json"), "{ not json"); // syntactically invalid
+    let errB = null;
+    try { rebuildIndex({ storeDir: d4 }); } catch (e) { errB = e; }
+    expect("store: rebuildIndex throws on a syntactically invalid run", errB !== null, "expected throw on invalid JSON");
+    expect("store: rebuildIndex JSON-parse error names the offending file", !!errB && /bad\.json/.test(errB.message),
+      `error did not name bad file: ${errB && errB.message}`);
+    rmSync(d4,{recursive:true,force:true});
+  }
+}
+
+// --- Task B4: tracked example store ---------------------------------------------------------------
+{
+  const { default: Ajv2020b4 } = await import("ajv/dist/2020.js");
+  const { default: addFormatsB4 } = await import("ajv-formats");
+  const ajvB4 = new Ajv2020b4({ allErrors: true, strict: false }); addFormatsB4(ajvB4);
+  const validateRecB4 = ajvB4.compile(JSON.parse(readFileSync(join(root,"schemas/recommendation-object.schema.json"),"utf8")));
+  const exIdx = (() => { try { return JSON.parse(readFileSync(join(root,"store/example/index.json"),"utf8")); } catch { return null; } })();
+  expect("example store: index.json exists and is array with >=1 entry", Array.isArray(exIdx) && exIdx.length >= 1, "no example store (run tools/seed-example.mjs first)");
+  if (Array.isArray(exIdx)) {
+    for (const entry of exIdx) {
+      const runPath = join(root, "store/example", entry.json);
+      expect(`example store: run file exists (${entry.id})`, existsSync(runPath), `run file missing: ${runPath}`);
+      if (existsSync(runPath)) {
+        const rec = JSON.parse(readFileSync(runPath,"utf8"));
+        expect(`example store: run schema-validates (${entry.id})`, validateRecB4(rec), `schema violations: ${(validateRecB4.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+      }
+    }
+  }
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + store-index schema + example store).`);

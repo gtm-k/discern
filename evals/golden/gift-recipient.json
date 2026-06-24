@@ -45,7 +45,7 @@
   "offers": [
     { "merchant": "ExampleCraft", "price": 85, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "returns": "free returns", "offer_confidence": 0.60, "verify_at_checkout": true }
   ],
-  "search_universe": { "queries_run": ["thoughtful birthday gift for mom under $120"], "sources_hit": ["OutletG", "OutletH"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 5 },
+  "search_universe": { "queries_run": ["thoughtful birthday gift for mom under $120"], "sources_hit": ["OutletG", "OutletH"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 5, "angles_swept": ["roundup", "community", "catalog"] },
   "outcome": "RECOMMEND",
   "reason_code": "NONE",
   "confidence_overall": 0.70,

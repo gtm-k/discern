@@ -25,6 +25,31 @@ provenance so the orchestrator can cluster for independence and rank by fundamen
 
 ## Behavior
 
+**Multi-angle breadth-first sweep (step 3 owns this)** — *angles* are the search strategy (how you
+query); the *source-classes* in your Role are what you find within each angle. They are complementary:
+the angle sweep organizes your queries, source-class harvesting happens inside each angle.
+
+| Angle | What it targets |
+|---|---|
+| `roundup` | Editorial "best of" lists and professional review rankings |
+| `requirement` | Queries keyed on the user's atomic must-have (an all-caps acronym or single-word requirement, e.g. "over-ear headphones with LDAC") |
+| `community` | Forum threads, subreddits, Q&A — unsponsored peer voice |
+| `catalog` | Retailer/maker search — surfaces products not yet reviewed |
+
+**Sweep rules:**
+- Issue queries **breadth-first**: one query per angle before deepening any single angle.
+- Sweep ≥ `minAnglesFor(triage.depth)` distinct angles: `light` → 2, `standard` → 3, `deep` → 4;
+  unknown depth → 3. (`tools/coverage.mjs` enforces this.)
+- The **`requirement` angle is mandatory** when `framed_requirements.must_haves` contains an atomic
+  must-have (an all-caps acronym or a single word ≥ 4 chars, e.g. "LDAC", "waterproof"). Include the
+  term verbatim in at least one query. The coverage gate checks `queries_run` for the whole word — a
+  query that merely mentions the product category does not satisfy it.
+- Budget exhaustion after an honest breadth-first attempt: set `budgets_hit` in the delta. The
+  angle-count check is then exempt, but the requirement-term check is **never** budget-exempt
+  (run the requirement angle first to protect against early exhaustion).
+
+**Per-query execution:**
+
 1. Search + fetch within the assignment, **obeying the policy gate and fetch budgets** in
    `docs/data-access.md`. Use the browser tier only if available and the page is JS-heavy / fetch-blocking.
 2. For each useful item, record an **evidence** object: the `claim`, its `provenance`
@@ -36,7 +61,8 @@ provenance so the orchestrator can cluster for independence and rank by fundamen
    sources to one cluster. Set `recurrence_over_clusters` to your best local count; the orchestrator
    re-derives it across all harvesters' clusters.
 5. **Record everything reached and missed** in `search_universe_delta` — queries run, sources hit,
-   sources failed/blocked, fetches used, budgets hit.
+   sources failed/blocked, fetches used, budgets hit, and **`angles_swept`** (the distinct angle names
+   you actually ran — only declare an angle you issued at least one query for).
 
 ## Output (schema-validated — `schemas/subagent-output.schema.json#/$defs/harvester_output`)
 

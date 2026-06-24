@@ -49,7 +49,7 @@
   "offers": [
     { "merchant": "ExampleApparel", "price": 79, "currency": "USD", "provenance_tier": "fetch", "timestamp": "2026-06-22", "returns": "30-day", "offer_confidence": 0.55, "verify_at_checkout": true }
   ],
-  "search_universe": { "queries_run": ["best organic cotton oxford shirt"], "sources_hit": ["OutletL", "OutletC"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 4 },
+  "search_universe": { "queries_run": ["best organic cotton oxford shirt"], "sources_hit": ["OutletL", "OutletC"], "sources_failed_or_blocked": [], "tiers_unavailable": ["browser", "api"], "budgets_hit": [], "fetches_used": 4, "angles_swept": ["roundup", "community", "catalog"] },
   "outcome": "RECOMMEND_WITH_CAVEATS",
   "reason_code": "NONE",
   "confidence_overall": 0.70,

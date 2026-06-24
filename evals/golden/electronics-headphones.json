@@ -96,12 +96,13 @@
     }
   ],
   "search_universe": {
-    "queries_run": ["best over-ear ANC headphones 2026", "WH-1000XM5 vs QC Ultra"],
+    "queries_run": ["best over-ear ANC headphones 2026", "WH-1000XM5 vs QC Ultra", "over-ear headphones with effective ANC"],
     "sources_hit": ["ReviewOutletA", "ReviewOutletB", "ForumA"],
     "sources_failed_or_blocked": [],
     "tiers_unavailable": ["browser", "api"],
     "budgets_hit": [],
-    "fetches_used": 7
+    "fetches_used": 7,
+    "angles_swept": ["roundup", "requirement", "community"]
   },
   "outcome": "RECOMMEND",
   "reason_code": "NONE",

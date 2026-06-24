@@ -1,0 +1,13 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"array",
+  "items":{"type":"object","additionalProperties":false,
+    "required":["id","timestamp","need","beneficiary_type","outcome","json","md"],
+    "properties":{
+      "id":{"type":"string"},"timestamp":{"type":"string"},"need":{"type":"string"},
+      "category_taxonomy":{"type":"string"},
+      "beneficiary_type":{"type":"string","enum":["self","recipient"]},
+      "outcome":{"type":"string","enum":["RECOMMEND","RECOMMEND_WITH_CAVEATS","INSUFFICIENT_EVIDENCE"]},
+      "reason_code":{"type":"string"},
+      "pick":{"type":["string","null"]},
+      "confidence_overall":{"type":["number","null"]},
+      "json":{"type":"string","pattern":"^runs/[^/\\\\]+\\.json$"},
+      "md":{"type":"string","pattern":"^runs/[^/\\\\]+\\.md$"}}}}
