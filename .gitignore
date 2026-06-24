@@ -19,3 +19,7 @@ store/index.json
 # Go viewer binary artifacts
 viewer/discern-view
 viewer/discern-view.exe
+
+# internal session scratch (never published)
+.superpowers/
+.remember/
