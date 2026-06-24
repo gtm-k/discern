@@ -29,8 +29,10 @@ invariant R1.
    gate and budgets** (`docs/data-access.md`).
 2. Compare fundamentals dimension by dimension; write a `fundamentals_card.summary`, a 0..1
    `fundamentals_score`, and a `fundamentals[]` list of `{dimension, finding}`.
-3. Search explicitly for **counterevidence** — recalls (disqualifying for the pick), defects, reliability
-   problems, credible dissent — and record each `{kind, detail, source}`. Counterevidence never disappears.
+3. Search explicitly for **counterevidence** — recalls (disqualifying for the pick), dealbreakers (emit
+   `kind:"dealbreaker"` when the candidate violates a framed dealbreaker or profile hard filter —
+   disqualifying for the pick), defects, reliability problems, credible dissent — and record each
+   `{kind, detail, source}`. Counterevidence never disappears.
 4. Respect the identity cap: a candidate whose `durable_ids.unresolved=true` **cannot** carry a `high`
    fundamentals/confidence claim — cap at `moderate` (`docs/definitions.md §3`).
 5. Record reached/missed sources in `search_universe_delta`.

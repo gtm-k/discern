@@ -148,7 +148,7 @@
     },
     {
       "name": "all-dealbreakered",
-      "expect": { "family": "INSUFFICIENT_EVIDENCE", "pickNull": true },
+      "expect": { "family": "INSUFFICIENT_EVIDENCE", "reason_code": "NO_CONSENSUS", "pickNull": true },
       "rec": {
         "beneficiary": { "type": "self" },
         "framed_requirements": { "need": "shirt, natural materials", "dealbreakers": ["polyester", "acrylic"] },
@@ -168,6 +168,31 @@
         "shortlist": [
           { "product": "PolyShirtA", "fundamentals_card": { "summary": "Polyester — dealbreaker.", "fundamentals_score": 0.80, "fundamentals": [ { "dimension": "materials", "finding": "Polyester" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Polyester — violates natural-materials dealbreaker", "source": "framed_requirements.dealbreakers" } ] },
           { "product": "AcrylicShirtB", "fundamentals_card": { "summary": "Acrylic — dealbreaker.", "fundamentals_score": 0.76, "fundamentals": [ { "dimension": "materials", "finding": "Acrylic blend" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Acrylic — violates natural-materials dealbreaker", "source": "framed_requirements.dealbreakers" } ] }
+        ]
+      }
+    },
+    {
+      "name": "excluded-evidence-does-not-prop-thin-pick",
+      "expect": { "family": "INSUFFICIENT_EVIDENCE", "pick_not": "DisqualifiedStrong" },
+      "rec": {
+        "beneficiary": { "type": "self" },
+        "framed_requirements": { "need": "bluetooth speaker, natural materials only", "dealbreakers": ["plastic"] },
+        "triage": { "stakes": "low", "depth": "standard", "safety_relevant": false },
+        "candidates": [
+          {
+            "product": "ThinEligible", "maker": "MakerTE", "durable_ids": { "model_no": "TE-01" },
+            "evidence": [ { "claim": "Listed on a single affiliate roundup only", "source_cluster_id": "te1", "provenance": { "url": "https://example.com/te", "owner": "AffSite", "access_tier": "fetch", "source_class": "editorial_roundup" }, "independence_flag": false, "affiliate_or_sponsored_flag": true, "claim_confidence": 0.30 } ],
+            "recurrence_over_clusters": 0
+          },
+          {
+            "product": "DisqualifiedStrong", "maker": "MakerDS", "durable_ids": { "model_no": "DS-01" },
+            "evidence": [ { "claim": "Top-ranked by multiple independent professional reviewers", "source_cluster_id": "ds1", "provenance": { "url": "https://example.com/ds", "owner": "IndieLab", "access_tier": "fetch", "source_class": "professional_review" }, "independence_flag": true, "affiliate_or_sponsored_flag": false, "claim_confidence": 0.78 } ],
+            "recurrence_over_clusters": 2
+          }
+        ],
+        "shortlist": [
+          { "product": "ThinEligible", "fundamentals_card": { "summary": "Minimal evidence; no independent review.", "fundamentals_score": 0.50, "fundamentals": [ { "dimension": "build", "finding": "Unknown" } ] }, "counterevidence": [] },
+          { "product": "DisqualifiedStrong", "fundamentals_card": { "summary": "Best fundamentals but plastic chassis — dealbreaker.", "fundamentals_score": 0.88, "fundamentals": [ { "dimension": "build", "finding": "Plastic — violates dealbreaker" } ] }, "counterevidence": [ { "kind": "dealbreaker", "detail": "Plastic chassis — violates natural-materials dealbreaker", "source": "framed_requirements.dealbreakers" } ] }
         ]
       }
     },

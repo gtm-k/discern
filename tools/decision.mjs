@@ -172,11 +172,12 @@ export function decideOutcome(rec) {
     const backed = finalists.length > 0 && finalists.every((f) => independentFundamentals(candByProduct.get(f.product)));
     if (!backed) return { family: "INSUFFICIENT_EVIDENCE", reason_code: "UNSAFE_BRAND_PROXY", tie };
   }
-  // No independent endorsement anywhere -> no consensus to stand on.
-  if (!candidates.some(independentEvidence))
+  // No independent endorsement among the RECOMMENDABLE candidates -> no consensus to stand on.
+  const eligibleCands = ranked.map((r) => candByProduct.get(r.product)).filter(Boolean);
+  if (!eligibleCands.some(independentEvidence))
     return { family: "INSUFFICIENT_EVIDENCE", reason_code: "NO_CONSENSUS", tie };
-  // Nothing recurs across a distinct cluster, or Teardown never produced a shortlist to compare.
-  const anyRecurrence = candidates.some((c) => (c.recurrence_over_clusters ?? 0) >= 1);
+  // Nothing among the eligible set recurs across a distinct cluster, or no shortlist to compare.
+  const anyRecurrence = ranked.some((r) => (r.recurrence_over_clusters ?? 0) >= 1);
   if (!anyRecurrence || (rec.shortlist ?? []).length === 0)
     return { family: "INSUFFICIENT_EVIDENCE", reason_code: "THIN_EVIDENCE", tie };
   // No eligible (non-recalled, joined) candidate remains to recommend — never emit RECOMMEND with no pick.
