@@ -156,6 +156,13 @@ confidence band + verify-at-checkout, per-claim confidence, caveats, and the rea
   (`UNSAFE_BRAND_PROXY` — a *different* candidate's evidence does not count), or data access failed
   (`INSUFFICIENT_ACCESS`). **Prefer this over a confident guess.**
 
+### 13. Archive (capability-gated, fail-soft)
+If Node.js and `tools/store.mjs` are available, call `recordRun(rec)` to persist the Recommendation
+Object to `store/`. This archives the run for durable record-keeping and future reference. If the
+capability is unavailable or the archive write fails, do **not** block the recommendation — complete
+and deliver it normally, but note in your summary that the run was not archived. Never fabricate
+a store write or silently skip archiving without saying so.
+
 ## Honesty rules (non-negotiable)
 - Tag every claim with a calibrated `claim_confidence` and every offer with a calibrated `offer_confidence`
   (0..1; `definitions.md §6`–`§7`). Never default to high. Affiliate/sponsored, non-independent, and
