@@ -1091,6 +1091,16 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   expect("store: id is timestamp+slug", /^20260623T100000Z-/.test(id), id);
   let threw=false; try { recordRun({outcome:"NONSENSE"}, {storeDir:dir, now:"2026-06-23T10:00:01.000Z"}); } catch { threw=true; }
   expect("store: rejects invalid rec", threw, "invalid object was stored");
+
+  // --- Task B3: rebuildIndex ---
+  rmSync(join(dir, "index.json"), { force: true });
+  const rebuilt = rebuildIndex({ storeDir: dir });
+  expect("store: rebuildIndex returns {count}", rebuilt.count === 1, `expected count=1, got ${rebuilt.count}`);
+  const rebuiltIdx = JSON.parse(readFileSync(join(dir, "index.json"), "utf8"));
+  expect("store: rebuilt index validates", Array.isArray(rebuiltIdx) && rebuiltIdx.length === 1, `index not valid array`);
+  expect("store: rebuilt index entry preserved", rebuiltIdx[0].id === id && rebuiltIdx[0].pick === "Sony WH-1000XM5" && rebuiltIdx[0].outcome === "RECOMMEND",
+    `entry missing/wrong: ${JSON.stringify(rebuiltIdx[0])}`);
+
   rmSync(dir,{recursive:true,force:true});
 }
 

@@ -44,3 +44,22 @@ export function recordRun(rec, { storeDir = "store", now } = {}) {
   writeFileSync(idxPath, JSON.stringify(idx,null,2));
   return { id };
 }
+
+export function rebuildIndex({ storeDir = "store" } = {}) {
+  const runs = join(storeDir,"runs");
+  const files = existsSync(runs) ? readdirSync(runs).filter(f=>f.endsWith(".json")).sort() : []; // id-prefix sorts chronologically
+  const idx = files.map(f => entryOf(JSON.parse(readFileSync(join(runs,f),"utf8")), basename(f,".json")));
+  if (!validateIndex(idx)) throw new Error("store: rebuilt index invalid");
+  writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2));
+  return { count: idx.length };
+}
+
+// CLI
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const [cmd, arg] = process.argv.slice(2);
+  try {
+    if (cmd === "record") { const { id } = recordRun(JSON.parse(readFileSync(arg,"utf8"))); console.log("recorded", id); }
+    else if (cmd === "reindex") { console.log("reindexed", rebuildIndex({}).count); }
+    else { console.error("usage: node tools/store.mjs record <rec.json> | reindex"); process.exit(2); }
+  } catch (e) { console.error(e.message); process.exit(1); }
+}
