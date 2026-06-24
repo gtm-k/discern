@@ -1043,6 +1043,17 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("schema: angles_swept present", !!s.$defs?.search_universe?.properties?.angles_swept || !!s.properties?.search_universe?.properties?.angles_swept, "angles_swept not in schema");
 }
 
+// --- Task A4b: wire angles_swept end-to-end (orchestration seed/fold + universe_delta + render) ----
+{
+  const u = orchestrate({ capabilities:{}, plan:{ work:[] } }).search_universe;
+  expect("orchestrate seeds angles_swept", Array.isArray(u.angles_swept), `angles_swept not seeded: ${JSON.stringify(u.angles_swept)}`);
+  const folded = orchestrate({ capabilities:{ subagents:true }, plan:{ subagents:[ { kind:"harvester", payload:{ agent:"harvester", candidates:[],
+    search_universe_delta:{ angles_swept:["requirement","community"] } } } ] } }).search_universe;
+  expect("orchestrate folds angles_swept (union)", folded.angles_swept.includes("requirement") && folded.angles_swept.includes("community"), JSON.stringify(folded.angles_swept));
+  const rep = renderReport({ outcome:"RECOMMEND", reason_code:"NONE", pick:{product:"X"}, search_universe:{ queries_run:["q"], sources_hit:[], sources_failed_or_blocked:[], tiers_unavailable:[], budgets_hit:[], fetches_used:1, angles_swept:["roundup","requirement"] } });
+  expect("render surfaces angles_swept", rep.includes("Angles swept:") && /requirement/.test(rep), "angles_swept not rendered");
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

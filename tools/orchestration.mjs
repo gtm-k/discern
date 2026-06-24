@@ -39,7 +39,7 @@ export const DEFAULTS = {
   per_api_calls: 20,         // enhancement-tier per-run API call budget (Phase 5)
 };
 
-/** A fresh search_universe with all six counters present, so they are populated on EVERY run. */
+/** A fresh search_universe with all seven counters present, so they are populated on EVERY run. */
 export function emptyUniverse() {
   return {
     queries_run: [],
@@ -48,6 +48,7 @@ export function emptyUniverse() {
     tiers_unavailable: [],
     budgets_hit: [],
     fetches_used: 0,
+    angles_swept: [],
   };
 }
 
@@ -173,7 +174,7 @@ export function validateSubagentResult(kind, payload) {
 /** Merge a subagent's honest search_universe_delta into the run universe (dedup arrays; sum fetches). */
 function foldDelta(universe, delta) {
   if (!delta || typeof delta !== "object" || Array.isArray(delta)) return;
-  for (const k of ["queries_run", "sources_hit", "sources_failed_or_blocked", "budgets_hit"]) {
+  for (const k of ["queries_run", "sources_hit", "sources_failed_or_blocked", "budgets_hit", "angles_swept"]) {
     if (!Array.isArray(delta[k])) continue;
     for (const x of delta[k]) if (typeof x === "string" && !universe[k].includes(x)) universe[k].push(x);
   }
