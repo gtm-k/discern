@@ -1,6 +1,6 @@
 // Discern Phase 2 logic tests: independence clustering, R1 grid ranking, affiliate down-weighting.
 // Runs via `npm test` (after schema validation). Exits non-zero on any failure.
-import { readFileSync, readdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -1102,6 +1102,37 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
     `entry missing/wrong: ${JSON.stringify(rebuiltIdx[0])}`);
 
   rmSync(dir,{recursive:true,force:true});
+
+  // --- FIX 3: recordRun validates the assembled index BEFORE any filesystem write (no orphans) ---
+  {
+    const d2 = mkdtempSync(join(tmpdir(),"discern-store-orphan-"));
+    // Pre-write a CORRUPT index so the assembled candidate index fails validation.
+    mkdirSync(join(d2,"runs"),{recursive:true});
+    writeFileSync(join(d2,"index.json"), JSON.stringify([{ bad: true }]));
+    const before = readdirSync(join(d2,"runs"));
+    let threw3 = false;
+    try { recordRun(rec, { storeDir: d2, now: "2026-06-23T11:00:00.000Z" }); } catch { threw3 = true; }
+    expect("store: recordRun throws when assembled index invalid", threw3, "expected throw on corrupt existing index");
+    const after = readdirSync(join(d2,"runs"));
+    expect("store: recordRun writes NO orphan run artifacts on index-validation failure",
+      after.length === before.length, `orphan files created: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+    rmSync(d2,{recursive:true,force:true});
+  }
+
+  // --- FIX 5: rebuildIndex validates every run and throws on a malformed one (naming the file) ---
+  {
+    const d3 = mkdtempSync(join(tmpdir(),"discern-store-rebuild-"));
+    mkdirSync(join(d3,"runs"),{recursive:true});
+    // One valid golden run, one malformed run missing required rec fields.
+    writeFileSync(join(d3,"runs","20260623T120000Z-good.json"), JSON.stringify(rec,null,2));
+    writeFileSync(join(d3,"runs","zzz.json"), JSON.stringify({ outcome: "RECOMMEND" }));
+    let err5 = null;
+    try { rebuildIndex({ storeDir: d3 }); } catch (e) { err5 = e; }
+    expect("store: rebuildIndex throws on a malformed run", err5 !== null, "expected throw on malformed run json");
+    expect("store: rebuildIndex error names the offending file", !!err5 && /zzz\.json/.test(err5.message),
+      `error did not name bad file: ${err5 && err5.message}`);
+    rmSync(d3,{recursive:true,force:true});
+  }
 }
 
 // --- Task B4: tracked example store ---------------------------------------------------------------

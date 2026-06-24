@@ -60,6 +60,10 @@ Each entry has the following fields:
 The `.md` file is produced by `tools/render.mjs` at write time. The Go viewer reads and displays it as-is;
 there is no rendering in Go. `tools/render.mjs` is the single renderer.
 
+`json` and `md` are always `runs/<id>.{json,md}` relative paths (enforced by the schema's `pattern`). The
+viewer treats these as untrusted on a shared or hand-edited store: it rejects any path that is absolute or
+escapes the store directory, so a tampered index cannot make the viewer read files outside `store/`.
+
 ## Privacy / gitignore
 
 ```
@@ -93,8 +97,12 @@ node tools/store.mjs reindex
 ```
 
 `record` validates the Recommendation Object against `schemas/recommendation-object.schema.json` before
-writing; it refuses invalid input. Both commands validate the resulting index against
-`schemas/store-index.schema.json` before writing.
+writing; it refuses invalid input. `record` also validates the assembled index **before** any file is
+written, so a validation failure never leaves orphaned run artifacts behind. `reindex` validates every
+`runs/*.json` against the rec schema and fails (naming the offending file) rather than indexing a malformed
+run. Both commands validate the resulting index against `schemas/store-index.schema.json` before writing.
+The `node tools/store.mjs` CLI always operates on the repo-root `store/`, regardless of the current
+working directory.
 
 ## Running the viewer
 

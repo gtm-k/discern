@@ -32,15 +32,21 @@ const entryOf = (rec, id, nowIso) => ({
 export function recordRun(rec, { storeDir = "store", now } = {}) {
   if (!validateRec(rec)) throw new Error(`store: refusing to record an invalid Recommendation Object: ${(validateRec.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
   const nowIso = now ?? new Date().toISOString();
+  const runs = join(storeDir,"runs");
+  // Resolve a collision-free id WITHOUT writing anything: an id is occupied if
+  // EITHER artifact (json or md) already exists.
   let id = makeId(rec, nowIso), n = 1;
-  const runs = join(storeDir,"runs"); mkdirSync(runs,{recursive:true});
-  while (existsSync(join(runs,id+".json"))) id = `${makeId(rec,nowIso)}-${++n}`;
-  writeFileSync(join(runs,id+".json"), JSON.stringify(rec,null,2));
-  writeFileSync(join(runs,id+".md"), renderReport(rec)+"\n");
+  while (existsSync(join(runs,id+".json")) || existsSync(join(runs,id+".md"))) id = `${makeId(rec,nowIso)}-${++n}`;
+  // Build the candidate index and validate it BEFORE any filesystem mutation, so
+  // a validation failure cannot leave orphaned run artifacts behind.
   const idxPath = join(storeDir,"index.json");
   const idx = existsSync(idxPath) ? JSON.parse(readFileSync(idxPath,"utf8")) : [];
   idx.push(entryOf(rec, id, nowIso));
   if (!validateIndex(idx)) throw new Error(`store: index would be invalid: ${(validateIndex.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+  // All validation passed — now write artifacts + index.
+  mkdirSync(runs,{recursive:true});
+  writeFileSync(join(runs,id+".json"), JSON.stringify(rec,null,2));
+  writeFileSync(join(runs,id+".md"), renderReport(rec)+"\n");
   writeFileSync(idxPath, JSON.stringify(idx,null,2));
   return { id };
 }
@@ -48,18 +54,30 @@ export function recordRun(rec, { storeDir = "store", now } = {}) {
 export function rebuildIndex({ storeDir = "store" } = {}) {
   const runs = join(storeDir,"runs");
   const files = existsSync(runs) ? readdirSync(runs).filter(f=>f.endsWith(".json")).sort() : []; // id-prefix sorts chronologically
-  const idx = files.map(f => entryOf(JSON.parse(readFileSync(join(runs,f),"utf8")), basename(f,".json")));
+  const idx = files.map(f => {
+    const rec = JSON.parse(readFileSync(join(runs,f),"utf8"));
+    // Fail-closed (consistent with recordRun): never index a malformed run with
+    // default fields — throw, naming the offending file.
+    if (!validateRec(rec)) throw new Error(`store: refusing to index invalid run ${f}: ${(validateRec.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+    return entryOf(rec, basename(f,".json"));
+  });
   if (!validateIndex(idx)) throw new Error("store: rebuilt index invalid");
+  mkdirSync(storeDir,{recursive:true}); // ensure a missing/custom store dir yields a valid empty index, not ENOENT
   writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2));
   return { count: idx.length };
 }
 
-// CLI
+// CLI — resolve the store against repo root so the CLI is location-independent
+// (consistent with how schemas are resolved above).
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const [cmd, arg] = process.argv.slice(2);
+  const storeDir = join(root, "store");
   try {
-    if (cmd === "record") { const { id } = recordRun(JSON.parse(readFileSync(arg,"utf8"))); console.log("recorded", id); }
-    else if (cmd === "reindex") { console.log("reindexed", rebuildIndex({}).count); }
+    if (cmd === "record") {
+      if (!arg) { console.error("usage: node tools/store.mjs record <rec.json>"); process.exit(2); }
+      const { id } = recordRun(JSON.parse(readFileSync(arg,"utf8")), { storeDir }); console.log("recorded", id);
+    }
+    else if (cmd === "reindex") { console.log("reindexed", rebuildIndex({ storeDir }).count); }
     else { console.error("usage: node tools/store.mjs record <rec.json> | reindex"); process.exit(2); }
   } catch (e) { console.error(e.message); process.exit(1); }
 }

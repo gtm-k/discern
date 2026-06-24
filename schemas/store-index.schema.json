@@ -9,4 +9,5 @@
       "reason_code":{"type":"string"},
       "pick":{"type":["string","null"]},
       "confidence_overall":{"type":["number","null"]},
-      "json":{"type":"string"},"md":{"type":"string"}}}}
+      "json":{"type":"string","pattern":"^runs/[^/\\\\]+\\.json$"},
+      "md":{"type":"string","pattern":"^runs/[^/\\\\]+\\.md$"}}}}
