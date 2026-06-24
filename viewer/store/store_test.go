@@ -1,6 +1,7 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -47,5 +48,55 @@ func TestFilter(t *testing.T) {
 	filtered = Filter(es, "   ")
 	if len(filtered) != 3 {
 		t.Fatalf("Filter(es, \"   \"): want 3, got %d", len(filtered))
+	}
+}
+
+// TestReadReportRejectsTraversal verifies ReadReport contains the index-supplied
+// md path within the store dir: relative-escape and absolute paths must be
+// rejected with an error and empty content, while a safe in-store path reads
+// normally (a safe-but-missing path surfaces a read error, not an escape error).
+func TestReadReportRejectsTraversal(t *testing.T) {
+	dir := t.TempDir()
+
+	// Lay down a real secret OUTSIDE the store and a safe report INSIDE it.
+	parent := filepath.Dir(dir)
+	secret := filepath.Join(parent, "discern-secret.txt")
+	if err := os.WriteFile(secret, []byte("TOP SECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(secret)
+
+	if err := os.MkdirAll(filepath.Join(dir, "runs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "runs", "x.md"), []byte("# report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Relative traversal escape -> error, no content.
+	if got, err := ReadReport(dir, filepath.Join("..", "discern-secret.txt")); err == nil || got != "" {
+		t.Fatalf("relative traversal: want error+empty, got content=%q err=%v", got, err)
+	}
+	// Backslash-style traversal (untrusted index could carry Windows separators).
+	if got, err := ReadReport(dir, `..\discern-secret.txt`); err == nil || got != "" {
+		t.Fatalf("backslash traversal: want error+empty, got content=%q err=%v", got, err)
+	}
+	// Absolute path -> error, no content.
+	if got, err := ReadReport(dir, secret); err == nil || got != "" {
+		t.Fatalf("absolute path: want error+empty, got content=%q err=%v", got, err)
+	}
+
+	// Safe in-store path still reads.
+	got, err := ReadReport(dir, filepath.Join("runs", "x.md"))
+	if err != nil {
+		t.Fatalf("safe path: unexpected error: %v", err)
+	}
+	if got != "# report" {
+		t.Fatalf("safe path: want %q, got %q", "# report", got)
+	}
+
+	// Safe-but-missing path surfaces a read error (NOT the escape error) and empty content.
+	if got, err := ReadReport(dir, filepath.Join("runs", "nope.md")); err == nil || got != "" {
+		t.Fatalf("safe-but-missing: want read error+empty, got content=%q err=%v", got, err)
 	}
 }
