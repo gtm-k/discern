@@ -1014,6 +1014,29 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("coverage minAngles: depths", [["light",2],["standard",3],["deep",4],[undefined,3]].every(([d,n]) => minAnglesFor(d?{depth:d}:{}) === n), "depth->N mapping wrong");
 }
 
+// --- Coverage coverageViolations -------------------------------------------------------------------
+{
+  const su = (over) => ({ triage:{depth:"standard"}, framed_requirements:{must_haves:["LDAC codec support"]},
+    search_universe:{ angles_swept:["roundup","requirement","community"], queries_run:["over-ear headphones with LDAC","best headphones 2026","reddit ldac picks"], budgets_hit:[] }, ...over });
+  expect("coverage PASS: 3 angles + LDAC reflected", coverageViolations(su({})).length === 0, JSON.stringify(coverageViolations(su({}))));
+  expect("coverage FAIL: requirement angle not declared, term missing",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup","community","catalog"], queries_run:["best headphones 2026","top picks","reddit picks"], budgets_hit:[] }})).some(v=>/not reflected.*not declared/.test(v)),
+    "expected requirement-not-declared");
+  expect("coverage FAIL: declares requirement, no term (exactly check 3, not duplicated)",
+    (()=>{ const vs=coverageViolations(su({ search_universe:{ angles_swept:["roundup","requirement","catalog"], queries_run:["best headphones 2026","catalog browse","top picks"], budgets_hit:[] }}));
+      return vs.some(v=>/declaration not backed/.test(v)) && !vs.some(v=>/not declared/.test(v)); })(),
+    "expected exactly declaration-not-backed, no duplicate");
+  expect("coverage FAIL: under-swept, budget remaining",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup"], queries_run:["over-ear headphones with LDAC"], budgets_hit:[] }})).some(v=>/swept 1 distinct/.test(v)),
+    "expected under-swept");
+  expect("coverage PASS: under-swept but budget exhausted exempts angle-count",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup"], queries_run:["over-ear headphones with LDAC"], budgets_hit:["max_fetches"] }})).every(v=>!/swept 1 distinct/.test(v)),
+    "honest exhaustion must exempt under-swept");
+  expect("coverage FAIL: budget exhausted but requirement term still missing (NOT exempt)",
+    coverageViolations(su({ search_universe:{ angles_swept:["roundup","community"], queries_run:["best headphones 2026","reddit picks"], budgets_hit:["max_fetches"] }})).some(v=>/not reflected.*not declared/.test(v)),
+    "requirement-term check must not be budget-exempt");
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);

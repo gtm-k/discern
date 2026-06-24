@@ -22,5 +22,28 @@ export function minAnglesFor(triage) {
   return d === "light" ? 2 : d === "deep" ? 4 : 3; // standard / unknown -> 3
 }
 
-// placeholder — full implementation added in A3
-export function coverageViolations(_rec) { return []; }
+const wholeWord = (q, term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(q);
+
+export function coverageViolations(rec) {
+  const v = [];
+  const su = rec?.search_universe ?? {};
+  const swept = Array.isArray(su.angles_swept) ? [...new Set(su.angles_swept.filter((a) => ANGLES.includes(a)))] : [];
+  const queries = Array.isArray(su.queries_run) ? su.queries_run.filter((q) => typeof q === "string") : [];
+  const budgetHit = Array.isArray(su.budgets_hit) && su.budgets_hit.length > 0;
+  const need = minAnglesFor(rec?.triage);
+  const terms = requirementTerms(rec?.framed_requirements);
+
+  if (swept.length < need && !budgetHit)
+    v.push(`coverage: swept ${swept.length} distinct angle(s), need >= ${need} (depth ${rec?.triage?.depth ?? "unknown"}) and budget was not exhausted`);
+
+  // checks 2 & 3 are MUTUALLY EXCLUSIVE — gate check 2 on the requirement angle NOT being declared
+  if (!swept.includes("requirement"))
+    for (const t of terms)
+      if (!queries.some((q) => wholeWord(q, t)))
+        v.push(`coverage: hard requirement '${t}' not reflected in queries_run and the requirement angle was not declared`);
+
+  if (swept.includes("requirement") && terms.length > 0 && !terms.some((t) => queries.some((q) => wholeWord(q, t))))
+    v.push(`coverage: angles_swept declares 'requirement' but no requirement term appears in queries_run (declaration not backed by reality)`);
+
+  return v;
+}
