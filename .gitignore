@@ -11,3 +11,11 @@ profiles/recipients/*.md
 
 # Windows crash dumps
 *.stackdump
+
+# Durable run store — live runs are private; example stays tracked
+store/runs/
+store/index.json
+
+# Go viewer binary artifacts
+viewer/discern-view
+viewer/discern-view.exe

@@ -1104,10 +1104,30 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   rmSync(dir,{recursive:true,force:true});
 }
 
+// --- Task B4: tracked example store ---------------------------------------------------------------
+{
+  const { default: Ajv2020b4 } = await import("ajv/dist/2020.js");
+  const { default: addFormatsB4 } = await import("ajv-formats");
+  const ajvB4 = new Ajv2020b4({ allErrors: true, strict: false }); addFormatsB4(ajvB4);
+  const validateRecB4 = ajvB4.compile(JSON.parse(readFileSync(join(root,"schemas/recommendation-object.schema.json"),"utf8")));
+  const exIdx = (() => { try { return JSON.parse(readFileSync(join(root,"store/example/index.json"),"utf8")); } catch { return null; } })();
+  expect("example store: index.json exists and is array with >=1 entry", Array.isArray(exIdx) && exIdx.length >= 1, "no example store (run tools/seed-example.mjs first)");
+  if (Array.isArray(exIdx)) {
+    for (const entry of exIdx) {
+      const runPath = join(root, "store/example", entry.json);
+      expect(`example store: run file exists (${entry.id})`, existsSync(runPath), `run file missing: ${runPath}`);
+      if (existsSync(runPath)) {
+        const rec = JSON.parse(readFileSync(runPath,"utf8"));
+        expect(`example store: run schema-validates (${entry.id})`, validateRecB4(rec), `schema violations: ${(validateRecB4.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+      }
+    }
+  }
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + store-index schema).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + store-index schema + example store).`);

@@ -157,10 +157,60 @@ if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, fou
   }
 }
 
+// --- Example store: validate runs/*.json against rec schema and index.json against index schema ----
+{
+  const indexSchema = JSON.parse(readFileSync(join(root, "schemas/store-index.schema.json"), "utf8"));
+  const validateIndex = ajv.compile(indexSchema);
+
+  const exampleDir = join(root, "store/example");
+  const exampleRuns = join(exampleDir, "runs");
+  const exampleIndexPath = join(exampleDir, "index.json");
+
+  if (!existsSync(exampleDir)) {
+    fail("store/example", "example store directory missing — run node tools/seed-example.mjs");
+  } else {
+    // Validate each run json against the rec schema
+    const runFiles = existsSync(exampleRuns)
+      ? readdirSync(exampleRuns, { withFileTypes: true })
+          .filter((d) => d.isFile() && d.name.endsWith(".json"))
+          .map((d) => join("store/example/runs", d.name))
+      : [];
+    checks++;
+    if (runFiles.length === 0) fail("store/example/runs", "no run json files found");
+    for (const f of runFiles) {
+      checks++;
+      let obj;
+      try {
+        obj = JSON.parse(readFileSync(join(root, f), "utf8"));
+      } catch (e) {
+        fail(f, `parse: ${e.message}`);
+        continue;
+      }
+      if (!validateRec(obj)) fail(f, `rec schema: ${errs(validateRec)}`);
+    }
+
+    // Validate index.json against the store-index schema
+    checks++;
+    if (!existsSync(exampleIndexPath)) {
+      fail("store/example/index.json", "missing — run node tools/seed-example.mjs");
+    } else {
+      let idx;
+      try {
+        idx = JSON.parse(readFileSync(exampleIndexPath, "utf8"));
+      } catch (e) {
+        fail("store/example/index.json", `parse: ${e.message}`);
+        idx = null;
+      }
+      if (idx !== null && !validateIndex(idx))
+        fail("store/example/index.json", `store-index schema: ${errs(validateIndex)}`);
+    }
+  }
+}
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nFAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} checks passed (profiles + golden + invalid fixtures + category-widening gate).`);
+console.log(`OK — ${checks} checks passed (profiles + golden + invalid fixtures + category-widening gate + example store).`);
