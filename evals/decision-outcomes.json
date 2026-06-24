@@ -148,7 +148,7 @@
     },
     {
       "name": "all-dealbreakered",
-      "expect": { "family": "INSUFFICIENT_EVIDENCE", "reason_code": "NO_CONSENSUS", "pickNull": true },
+      "expect": { "family": "INSUFFICIENT_EVIDENCE", "reason_code": "THIN_EVIDENCE", "pickNull": true },
       "rec": {
         "beneficiary": { "type": "self" },
         "framed_requirements": { "need": "shirt, natural materials", "dealbreakers": ["polyester", "acrylic"] },

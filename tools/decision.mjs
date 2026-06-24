@@ -172,6 +172,11 @@ export function decideOutcome(rec) {
     const backed = finalists.length > 0 && finalists.every((f) => independentFundamentals(candByProduct.get(f.product)));
     if (!backed) return { family: "INSUFFICIENT_EVIDENCE", reason_code: "UNSAFE_BRAND_PROXY", tie };
   }
+  // No eligible (non-recalled, non-disqualified, joined) candidate remains to recommend — never emit
+  // RECOMMEND with no pick. Checked first so "no eligible candidate" reads as absence (THIN_EVIDENCE),
+  // not as evidence disagreement (NO_CONSENSUS).
+  if (ranked.length === 0)
+    return { family: "INSUFFICIENT_EVIDENCE", reason_code: "THIN_EVIDENCE", tie };
   // No independent endorsement among the RECOMMENDABLE candidates -> no consensus to stand on.
   const eligibleCands = ranked.map((r) => candByProduct.get(r.product)).filter(Boolean);
   if (!eligibleCands.some(independentEvidence))
@@ -179,9 +184,6 @@ export function decideOutcome(rec) {
   // Nothing among the eligible set recurs across a distinct cluster, or no shortlist to compare.
   const anyRecurrence = ranked.some((r) => (r.recurrence_over_clusters ?? 0) >= 1);
   if (!anyRecurrence || (rec.shortlist ?? []).length === 0)
-    return { family: "INSUFFICIENT_EVIDENCE", reason_code: "THIN_EVIDENCE", tie };
-  // No eligible (non-recalled, joined) candidate remains to recommend — never emit RECOMMEND with no pick.
-  if (ranked.length === 0)
     return { family: "INSUFFICIENT_EVIDENCE", reason_code: "THIN_EVIDENCE", tie };
 
   return { family: "RECOMMEND", reason_code: "NONE", tie };
