@@ -1,8 +1,9 @@
 // Discern Phase 2 logic tests: independence clustering, R1 grid ranking, affiliate down-weighting.
 // Runs via `npm test` (after schema validation). Exits non-zero on any failure.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { clusterSources, distinctClusters, recurrenceByProduct, sourceWeight } from "./cluster.mjs";
 import { gridWinner } from "./grid.mjs";
 import {
@@ -1077,6 +1078,21 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
 
 // --- Task B1: store-index schema (writer<->viewer contract) ------------------------------------------
 expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-index.schema.json");return s.type==="array"&&!!s.items?.properties?.id;})(), "schema missing/!array");
+
+// --- Task B2: recordRun + id scheme (durable run store) -----------------------------------------------
+{
+  const { recordRun, rebuildIndex } = await import("./store.mjs");
+  const dir = mkdtempSync(join(tmpdir(),"discern-store-"));
+  const rec = load("evals/golden/electronics-headphones.json");
+  const { id } = recordRun(rec, { storeDir: dir, now: "2026-06-23T10:00:00.000Z" });
+  expect("store: writes json+md", existsSync(join(dir,"runs",id+".json")) && existsSync(join(dir,"runs",id+".md")), "artifacts missing");
+  const idx = JSON.parse(readFileSync(join(dir,"index.json"),"utf8"));
+  expect("store: index entry", idx.length===1 && idx[0].pick==="Sony WH-1000XM5" && idx[0].outcome==="RECOMMEND", JSON.stringify(idx));
+  expect("store: id is timestamp+slug", /^20260623T100000Z-/.test(id), id);
+  let threw=false; try { recordRun({outcome:"NONSENSE"}, {storeDir:dir, now:"2026-06-23T10:00:01.000Z"}); } catch { threw=true; }
+  expect("store: rejects invalid rec", threw, "invalid object was stored");
+  rmSync(dir,{recursive:true,force:true});
+}
 
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
