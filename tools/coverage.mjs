@@ -16,3 +16,11 @@ export function requirementTerms(framed) {
   for (const m of framed?.must_haves ?? []) add(m);          // must_haves only
   return [...out];
 }
+
+export function minAnglesFor(triage) {
+  const d = triage?.depth;
+  return d === "light" ? 2 : d === "deep" ? 4 : 3; // standard / unknown -> 3
+}
+
+// placeholder — full implementation added in A3
+export function coverageViolations(_rec) { return []; }

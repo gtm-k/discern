@@ -29,7 +29,7 @@ import {
 } from "./orchestration.mjs";
 import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
 import { liveSmokeViolations } from "./live-smoke-check.mjs";
-import { requirementTerms } from "./coverage.mjs";
+import { requirementTerms, minAnglesFor, coverageViolations } from "./coverage.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -1007,6 +1007,11 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     `got ${JSON.stringify(t)}`);
   expect("coverage req: phrase-only must_have -> empty", requirementTerms({ must_haves:["natural / non-synthetic fabric"] }).length === 0, "phrase must not enforce a term");
   expect("coverage req: no must_haves -> empty", requirementTerms({ need:"x", dealbreakers:["x"] }).length === 0, "expected []");
+}
+
+// --- Coverage minAnglesFor -------------------------------------------------------------------------
+{
+  expect("coverage minAngles: depths", [["light",2],["standard",3],["deep",4],[undefined,3]].every(([d,n]) => minAnglesFor(d?{depth:d}:{}) === n), "depth->N mapping wrong");
 }
 
 // --- Report ----------------------------------------------------------------------------------------
