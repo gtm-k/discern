@@ -29,6 +29,7 @@ import {
 } from "./orchestration.mjs";
 import { categoryGateViolations, anchorResolves } from "./category-gate.mjs";
 import { liveSmokeViolations } from "./live-smoke-check.mjs";
+import { requirementTerms } from "./coverage.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const load = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -994,6 +995,18 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   expect("anchor: doc prose (no heading) does NOT resolve",
     anchorResolves("the depth decision is computed elsewhere", "Depth decision", false) === false,
     `prose without a heading must not resolve a doc anchor`);
+}
+
+// --- Coverage requirement terms extraction ---------------------------------------------------------
+{
+  const t = requirementTerms({ must_haves: ["LDAC codec support","effective ANC","comfortable for long wear","waterproof"], dealbreakers: ["polyester"] });
+  expect("coverage req: acronyms + single-word, NOT phrases, NOT dealbreakers",
+    t.includes("ldac") && t.includes("anc") && t.includes("waterproof")
+      && !t.includes("polyester")
+      && !t.some(x => ["comfortable","wear","long"].includes(x)),
+    `got ${JSON.stringify(t)}`);
+  expect("coverage req: phrase-only must_have -> empty", requirementTerms({ must_haves:["natural / non-synthetic fabric"] }).length === 0, "phrase must not enforce a term");
+  expect("coverage req: no must_haves -> empty", requirementTerms({ need:"x", dealbreakers:["x"] }).length === 0, "expected []");
 }
 
 // --- Report ----------------------------------------------------------------------------------------
