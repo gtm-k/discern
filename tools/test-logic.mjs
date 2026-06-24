@@ -1075,10 +1075,13 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
     expect(`coverage F5 render ${n}`, renderReport(load(`evals/golden/${n}`)).includes("Angles swept:"), `${n}: angles_swept not in report`);
 }
 
+// --- Task B1: store-index schema (writer<->viewer contract) ------------------------------------------
+expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-index.schema.json");return s.type==="array"&&!!s.items?.properties?.id;})(), "schema missing/!array");
+
 // --- Report ----------------------------------------------------------------------------------------
 if (failures.length) {
   console.error(`\nLOGIC FAIL — ${failures.length} problem(s) across ${checks} checks:`);
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + store-index schema).`);
