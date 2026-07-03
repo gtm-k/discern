@@ -1193,6 +1193,7 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   const { default: addFormatsB4 } = await import("ajv-formats");
   const ajvB4 = new Ajv2020b4({ allErrors: true, strict: false }); addFormatsB4(ajvB4);
   const validateRecB4 = ajvB4.compile(JSON.parse(readFileSync(join(root,"schemas/recommendation-object.schema.json"),"utf8")));
+  const validateCompareB4 = ajvB4.compile(JSON.parse(readFileSync(join(root,"schemas/store-compare.schema.json"),"utf8")));
   const exIdx = (() => { try { return JSON.parse(readFileSync(join(root,"store/example/index.json"),"utf8")); } catch { return null; } })();
   expect("example store: index.json exists and is array with >=1 entry", Array.isArray(exIdx) && exIdx.length >= 1, "no example store (run tools/seed-example.mjs first)");
   if (Array.isArray(exIdx)) {
@@ -1203,7 +1204,278 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
         const rec = JSON.parse(readFileSync(runPath,"utf8"));
         expect(`example store: run schema-validates (${entry.id})`, validateRecB4(rec), `schema violations: ${(validateRecB4.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
       }
+      // The tracked example must carry a comparison sidecar (the seam fixture the Go reader parses).
+      expect(`example store: index entry has compare path (${entry.id})`, entry.compare === `runs/${entry.id}.compare.json`,
+        `entry.compare=${entry.compare}`);
+      const cmpPath = join(root, "store/example", `runs/${entry.id}.compare.json`);
+      expect(`example store: comparison sidecar exists (${entry.id})`, existsSync(cmpPath), `sidecar missing: ${cmpPath}`);
+      if (existsSync(cmpPath)) {
+        const cmp = JSON.parse(readFileSync(cmpPath,"utf8"));
+        expect(`example store: sidecar schema-validates (${entry.id})`, validateCompareB4(cmp),
+          `schema violations: ${(validateCompareB4.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+        expect(`example store: sidecar id = run id (${entry.id})`, cmp.id === entry.id, `id=${cmp.id}`);
+      }
     }
+  }
+}
+
+// --- Phase 1 (v2.1): store writes + validates the comparison sidecar (design 2026-07-03 §6b/§8) ----
+{
+  const { recordRun, rebuildIndex } = await import("./store.mjs");
+  const { default: Ajv2020cs } = await import("ajv/dist/2020.js");
+  const { default: addFormatsCs } = await import("ajv-formats");
+  const ajvCs = new Ajv2020cs({ allErrors: true, strict: false }); addFormatsCs(ajvCs);
+  const validateCompareCs = ajvCs.compile(JSON.parse(readFileSync(join(root,"schemas/store-compare.schema.json"),"utf8")));
+  // The clothing golden carries a dealbreaker -> a richer sidecar (a removed item) than the happy path.
+  const rec = load("evals/golden/clothing-natural-materials.json");
+
+  // recordRun writes a schema-valid sidecar AND the index entry gains its "compare" path.
+  {
+    const dir = mkdtempSync(join(tmpdir(),"discern-compare-"));
+    const { id } = recordRun(rec, { storeDir: dir, now: "2026-07-03T10:00:00.000Z" });
+    const sidecarPath = join(dir,"runs",id+".compare.json");
+    expect("store/compare: recordRun writes the sidecar", existsSync(sidecarPath), `missing ${sidecarPath}`);
+    const sidecar = JSON.parse(readFileSync(sidecarPath,"utf8"));
+    expect("store/compare: written sidecar schema-validates", validateCompareCs(sidecar),
+      `violations: ${(validateCompareCs.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+    expect("store/compare: sidecar id stamped with the run id", sidecar.id === id, `id=${sidecar.id} want ${id}`);
+    const idx = JSON.parse(readFileSync(join(dir,"index.json"),"utf8"));
+    expect("store/compare: index entry gains the compare path", idx[0].compare === `runs/${id}.compare.json`,
+      `compare=${idx[0].compare}`);
+    rmSync(dir,{recursive:true,force:true});
+  }
+
+  // rebuildIndex back-fills a sidecar for an existing run that has none (the reindex path §8).
+  {
+    const d2 = mkdtempSync(join(tmpdir(),"discern-compare-reindex-"));
+    mkdirSync(join(d2,"runs"),{recursive:true});
+    const rid = "20260703T110000Z-good";
+    writeFileSync(join(d2,"runs",rid+".json"), JSON.stringify(rec,null,2)+"\n");
+    const rb = rebuildIndex({ storeDir: d2 });
+    expect("store/compare: rebuildIndex counts the run", rb.count === 1, `count=${rb.count}`);
+    const backfilled = join(d2,"runs",rid+".compare.json");
+    expect("store/compare: rebuildIndex back-fills the sidecar", existsSync(backfilled), `missing ${backfilled}`);
+    const bf = JSON.parse(readFileSync(backfilled,"utf8"));
+    expect("store/compare: back-filled sidecar schema-validates", validateCompareCs(bf), `invalid back-filled sidecar`);
+    expect("store/compare: back-filled sidecar id = run id", bf.id === rid, `id=${bf.id}`);
+    const d2idx = JSON.parse(readFileSync(join(d2,"index.json"),"utf8"));
+    expect("store/compare: reindex index entry has the compare path", d2idx[0].compare === `runs/${rid}.compare.json`,
+      `compare=${d2idx[0].compare}`);
+    rmSync(d2,{recursive:true,force:true});
+  }
+
+  // Fail-closed: a malformed comparison is REFUSED and leaves NO artifacts (like the rec/index guards).
+  {
+    const d3 = mkdtempSync(join(tmpdir(),"discern-compare-failclosed-"));
+    let threwRec = false;
+    try { recordRun(rec, { storeDir: d3, now: "2026-07-03T12:00:00.000Z", makeComparison: () => ({ bogus: true }) }); }
+    catch { threwRec = true; }
+    expect("store/compare: recordRun refuses an invalid comparison", threwRec, "expected throw on invalid comparison");
+    const leaked = existsSync(join(d3,"runs")) ? readdirSync(join(d3,"runs")) : [];
+    expect("store/compare: recordRun writes NO artifacts on an invalid comparison",
+      leaked.length === 0 && !existsSync(join(d3,"index.json")), `artifacts leaked: ${JSON.stringify(leaked)}`);
+
+    // rebuildIndex is equally fail-closed on an invalid comparison.
+    mkdirSync(join(d3,"runs"),{recursive:true});
+    writeFileSync(join(d3,"runs","20260703T130000Z-x.json"), JSON.stringify(rec,null,2)+"\n");
+    let threwReidx = false;
+    try { rebuildIndex({ storeDir: d3, makeComparison: () => ({ bogus: true }) }); } catch { threwReidx = true; }
+    expect("store/compare: rebuildIndex refuses an invalid comparison", threwReidx, "expected throw on invalid comparison");
+    expect("store/compare: rebuildIndex writes no index/sidecar on an invalid comparison",
+      !existsSync(join(d3,"index.json")) && !existsSync(join(d3,"runs","20260703T130000Z-x.compare.json")),
+      "artifacts leaked on a failed reindex");
+    rmSync(d3,{recursive:true,force:true});
+  }
+
+  // Back-compat: an old index WITHOUT a "compare" field still validates against the index schema.
+  {
+    const legacyIdx = [{ id:"20260101T000000Z-x", timestamp:"2026-01-01T00:00:00.000Z", need:"n",
+      beneficiary_type:"self", outcome:"RECOMMEND", json:"runs/20260101T000000Z-x.json", md:"runs/20260101T000000Z-x.md" }];
+    expect("store/compare: legacy index without compare still validates", validateCompareCs !== null && (()=>{
+      const vi = ajvCs.compile(JSON.parse(readFileSync(join(root,"schemas/store-index.schema.json"),"utf8")));
+      return vi(legacyIdx);
+    })(), "legacy index rejected — compare must be OPTIONAL");
+  }
+}
+
+// --- Phase 1 (v2.1): in-run candidate comparison model (design 2026-07-03 §4/§7) ------------------
+{
+  const { buildComparison, cleanScore } = await import("./compare.mjs");
+  const { default: Ajv2020c } = await import("ajv/dist/2020.js");
+  const { default: addFormatsC } = await import("ajv-formats");
+  const ajvC = new Ajv2020c({ allErrors: true, strict: false }); addFormatsC(ajvC);
+  const validateCompare = ajvC.compile(JSON.parse(readFileSync(join(root, "schemas/store-compare.schema.json"), "utf8")));
+
+  const clothing = load("evals/golden/clothing-natural-materials.json");
+  const cmp = buildComparison(clothing);
+  const byProduct = Object.fromEntries(cmp.items.map((it) => [it.product, it]));
+
+  // Status classification: pick / runner-up / disqualified all derived from the recorded recommendation.
+  expect("compare: pick classified", byProduct["Organic Cotton Oxford"]?.status === "pick",
+    `got ${byProduct["Organic Cotton Oxford"]?.status}`);
+  expect("compare: runner-up classified", byProduct["Linen Camp Shirt"]?.status === "runner_up",
+    `got ${byProduct["Linen Camp Shirt"]?.status}`);
+  expect("compare: dealbreaker -> disqualified", byProduct["Poly-Blend Oxford"]?.status === "disqualified",
+    `got ${byProduct["Poly-Blend Oxford"]?.status}`);
+
+  // Disqualified item: reason = its CE detail, a non-null rule, excluded from radar, null norm + clean.
+  const poly = byProduct["Poly-Blend Oxford"];
+  const polyCeDetail = clothing.shortlist.find((s) => s.product === "Poly-Blend Oxford").counterevidence[0].detail;
+  expect("compare: disqualified reason is the CE detail", poly?.disqualified_reason === polyCeDetail,
+    `reason=${poly?.disqualified_reason}`);
+  expect("compare: dealbreaker_rule non-null for disqualified", typeof poly?.dealbreaker_rule === "string" && poly.dealbreaker_rule.length > 0,
+    `rule=${poly?.dealbreaker_rule}`);
+  expect("compare: disqualified excluded from radar_default.series", !cmp.radar_default.series.includes("Poly-Blend Oxford"),
+    `series=${JSON.stringify(cmp.radar_default.series)}`);
+  expect("compare: disqualified consensus_norm null", poly?.scores.consensus_norm === null, `got ${poly?.scores.consensus_norm}`);
+  expect("compare: disqualified clean null", poly?.scores.clean === null, `got ${poly?.scores.clean}`);
+  // Eligible items never carry a reason/rule.
+  expect("compare: eligible has null reason + rule",
+    byProduct["Organic Cotton Oxford"]?.disqualified_reason === null && byProduct["Organic Cotton Oxford"]?.dealbreaker_rule === null,
+    `reason=${byProduct["Organic Cotton Oxford"]?.disqualified_reason}, rule=${byProduct["Organic Cotton Oxford"]?.dealbreaker_rule}`);
+
+  // Fundamentals honesty: a shortlisted item shows its raw score.
+  expect("compare: shortlisted fundamentals is the raw score", byProduct["Organic Cotton Oxford"]?.scores.fundamentals === 0.78,
+    `got ${byProduct["Organic Cotton Oxford"]?.scores.fundamentals}`);
+  // durable_ids.unresolved surfaces.
+  expect("compare: durable_unresolved surfaced", byProduct["Linen Camp Shirt"]?.durable_unresolved === true,
+    `got ${byProduct["Linen Camp Shirt"]?.durable_unresolved}`);
+
+  // Evidence = mean claim_confidence (single-evidence pick here -> 0.75).
+  expect("compare: evidence is mean claim_confidence", byProduct["Organic Cotton Oxford"]?.scores.evidence === 0.75,
+    `got ${byProduct["Organic Cotton Oxford"]?.scores.evidence}`);
+
+  // Consensus: raw preserved; norm over the ELIGIBLE set (eligible raws 2 cotton / 1 linen; poly disq excluded).
+  expect("compare: consensus_raw preserved", byProduct["Organic Cotton Oxford"]?.scores.consensus_raw === 2,
+    `got ${byProduct["Organic Cotton Oxford"]?.scores.consensus_raw}`);
+  expect("compare: consensus_norm pick = 1.0 (eligible max)", byProduct["Organic Cotton Oxford"]?.scores.consensus_norm === 1,
+    `got ${byProduct["Organic Cotton Oxford"]?.scores.consensus_norm}`);
+  expect("compare: consensus_norm runner = 0.5 (eligible max)", byProduct["Linen Camp Shirt"]?.scores.consensus_norm === 0.5,
+    `got ${byProduct["Linen Camp Shirt"]?.scores.consensus_norm}`);
+
+  // Counts arithmetic.
+  expect("compare: counts.considered == #candidates", cmp.counts.considered === clothing.candidates.length,
+    `got ${cmp.counts.considered}`);
+  expect("compare: counts.removed == #dealbreaker", cmp.counts.removed === 1, `got ${cmp.counts.removed}`);
+  expect("compare: counts.eligible == considered - removed", cmp.counts.eligible === cmp.counts.considered - cmp.counts.removed,
+    `got ${cmp.counts.eligible}`);
+
+  // axes constant + dealbreaker_rules copied verbatim for the legend.
+  expect("compare: axes are the four fixed axes",
+    JSON.stringify(cmp.axes) === JSON.stringify(["fundamentals", "consensus", "evidence", "clean"]),
+    `got ${JSON.stringify(cmp.axes)}`);
+  expect("compare: dealbreaker_rules copied verbatim",
+    JSON.stringify(cmp.dealbreaker_rules) === JSON.stringify(clothing.framed_requirements.dealbreakers),
+    `got ${JSON.stringify(cmp.dealbreaker_rules)}`);
+
+  // radar_default: <=2 series, pick first, rival = highest-fundamentals eligible non-pick.
+  expect("compare: radar series length <= 2", cmp.radar_default.series.length <= 2, `len=${cmp.radar_default.series.length}`);
+  expect("compare: radar series[0] is the pick", cmp.radar_default.series[0] === "Organic Cotton Oxford",
+    `series=${JSON.stringify(cmp.radar_default.series)}`);
+  expect("compare: radar series[1] is the highest-fundamentals eligible rival", cmp.radar_default.series[1] === "Linen Camp Shirt",
+    `series=${JSON.stringify(cmp.radar_default.series)}`);
+
+  // Canonical item order: pick first, removed last.
+  expect("compare: items ordered pick-first", cmp.items[0]?.status === "pick", `first=${cmp.items[0]?.status}`);
+  expect("compare: items ordered removed-last", cmp.items[cmp.items.length - 1]?.status === "disqualified",
+    `last=${cmp.items[cmp.items.length - 1]?.status}`);
+
+  // Clean-axis penalty ORDERING is the contract: recall > defect === reliability > dissent > other.
+  const pen = (kind) => 1 - cleanScore([{ kind, detail: "x" }]);
+  expect("compare: clean penalty recall > defect", pen("recall") > pen("defect"), `recall=${pen("recall")} defect=${pen("defect")}`);
+  expect("compare: clean penalty defect === reliability", pen("defect") === pen("reliability"),
+    `defect=${pen("defect")} reliability=${pen("reliability")}`);
+  expect("compare: clean penalty defect > dissent", pen("defect") > pen("dissent"), `defect=${pen("defect")} dissent=${pen("dissent")}`);
+  expect("compare: clean penalty dissent > other", pen("dissent") > pen("other"), `dissent=${pen("dissent")} other=${pen("other")}`);
+  expect("compare: dealbreaker contributes no clean penalty", cleanScore([{ kind: "dealbreaker", detail: "x" }]) === 1,
+    `got ${cleanScore([{ kind: "dealbreaker", detail: "x" }])}`);
+  expect("compare: empty counterevidence -> clean 1.0", cleanScore([]) === 1, `got ${cleanScore([])}`);
+
+  // Electronics: a shortlisted item's clean reflects its counterevidence; a clean item is 1.0.
+  const electronics = load("evals/golden/electronics-headphones.json");
+  const ecmp = buildComparison(electronics);
+  const eBy = Object.fromEntries(ecmp.items.map((it) => [it.product, it]));
+  expect("compare: pick clean reflects defect penalty (0.75)", eBy["Sony WH-1000XM5"]?.scores.clean === 0.75,
+    `got ${eBy["Sony WH-1000XM5"]?.scores.clean}`);
+  expect("compare: no-counterevidence item clean 1.0", eBy["Bose QuietComfort Ultra"]?.scores.clean === 1,
+    `got ${eBy["Bose QuietComfort Ultra"]?.scores.clean}`);
+  expect("compare: evidence = mean of two claim_confidences",
+    Math.abs((eBy["Sony WH-1000XM5"]?.scores.evidence ?? 0) - (0.85 + 0.70) / 2) < 1e-9,
+    `got ${eBy["Sony WH-1000XM5"]?.scores.evidence}`);
+
+  // Crafted: a not-shortlisted candidate -> fundamentals null + status not_shortlisted; and a disqualified
+  // item with the HIGHEST recurrence must be excluded from the normalization max (eligible-only scope).
+  const crafted = {
+    beneficiary: { type: "self" },
+    framed_requirements: { need: "widget", dealbreakers: ["banned material"] },
+    triage: { stakes: "low", reversibility: "easy", commoditization: "mixed", depth: "standard", safety_relevant: false },
+    candidates: [
+      { product: "PickW", maker: "M1", durable_ids: { model_no: "P1" },
+        evidence: [{ claim: "good", source_cluster_id: "a", provenance: { url: "https://e/1", owner: "O1", access_tier: "fetch", source_class: "professional_review" }, independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.8 }],
+        recurrence_over_clusters: 2 },
+      { product: "BannedW", maker: "M2", durable_ids: { model_no: "P2" },
+        evidence: [{ claim: "banned", source_cluster_id: "b", provenance: { url: "https://e/2", owner: "O2", access_tier: "fetch", source_class: "professional_review" }, independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.6 }],
+        recurrence_over_clusters: 9 },
+      { product: "UnlistedW", maker: "M3", durable_ids: { model_no: "P3" },
+        evidence: [{ claim: "unlisted", source_cluster_id: "c", provenance: { url: "https://e/3", owner: "O3", access_tier: "fetch", source_class: "professional_review" }, independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.5 }],
+        recurrence_over_clusters: 1 },
+    ],
+    shortlist: [
+      { product: "PickW", fundamentals_card: { summary: "s", fundamentals_score: 0.7, fundamentals: [{ dimension: "d", finding: "f" }] }, counterevidence: [] },
+      { product: "BannedW", fundamentals_card: { summary: "s", fundamentals_score: 0.9, fundamentals: [{ dimension: "d", finding: "f" }] },
+        counterevidence: [{ kind: "dealbreaker", detail: "Contains banned material", source: "framed_requirements.dealbreakers" }] },
+    ],
+    pick: { product: "PickW", maker: "M1" }, runners_up: [],
+    search_universe: { queries_run: ["widget"], sources_hit: [], sources_failed_or_blocked: [], tiers_unavailable: [], budgets_hit: [], fetches_used: 1, angles_swept: ["roundup"] },
+    outcome: "RECOMMEND", reason_code: "NONE", confidence_overall: 0.7, rationale: "PickW.", value_assessment: { summary: "ok" },
+  };
+  const cc = buildComparison(crafted);
+  const ccBy = Object.fromEntries(cc.items.map((it) => [it.product, it]));
+  expect("compare: not-shortlisted -> status not_shortlisted", ccBy["UnlistedW"]?.status === "not_shortlisted",
+    `got ${ccBy["UnlistedW"]?.status}`);
+  expect("compare: not-shortlisted -> fundamentals null (never 0)", ccBy["UnlistedW"]?.scores.fundamentals === null,
+    `got ${ccBy["UnlistedW"]?.scores.fundamentals}`);
+  expect("compare: not-shortlisted -> clean null (no counterevidence data)", ccBy["UnlistedW"]?.scores.clean === null,
+    `got ${ccBy["UnlistedW"]?.scores.clean}`);
+  // Eligible-only max = max(PickW 2, UnlistedW 1) = 2 (BannedW disq raw 9 excluded).
+  expect("compare: normalization excludes disqualified from max (pick norm 1.0)", ccBy["PickW"]?.scores.consensus_norm === 1,
+    `got ${ccBy["PickW"]?.scores.consensus_norm}`);
+  expect("compare: eligible max is 2 not 9 (unlisted norm 0.5)", ccBy["UnlistedW"]?.scores.consensus_norm === 0.5,
+    `got ${ccBy["UnlistedW"]?.scores.consensus_norm}`);
+  // A not-shortlisted item can still be a radar rival only if it has a fundamentals score — here it does not.
+  expect("compare: not-shortlisted item not chosen as radar rival", !cc.radar_default.series.includes("UnlistedW"),
+    `series=${JSON.stringify(cc.radar_default.series)}`);
+
+  // Shared-predicate parity (design §13): the products the prose grid marks "DISQUALIFIED — dealbreaker"
+  // are exactly the compare items with status "disqualified" — grid, engine, and tableau in lockstep.
+  const gridReport = renderReport(clothing);
+  const gridLines = gridReport.split("\n");
+  const cmpDisq = cmp.items.filter((it) => it.status === "disqualified").map((it) => it.product);
+  const gridDisqProducts = clothing.candidates.map((c) => c.product)
+    .filter((p) => gridLines.some((l) => l.includes(p) && l.includes("DISQUALIFIED — dealbreaker")));
+  expect("compare/grid parity: identical disqualified set",
+    JSON.stringify([...cmpDisq].sort()) === JSON.stringify([...gridDisqProducts].sort()),
+    `compare=${JSON.stringify(cmpDisq)} grid=${JSON.stringify(gridDisqProducts)}`);
+
+  // Degenerate INSUFFICIENT_EVIDENCE (no shortlist / no pick): builds, lists every candidate, radar off,
+  // and fabricates no pick status.
+  const supp = load("evals/golden/safety-supplement.json");
+  let sThrew = false, scmp = null;
+  try { scmp = buildComparison(supp); } catch { sThrew = true; }
+  expect("compare: degenerate does not throw", !sThrew && !!scmp, `buildComparison threw on safety-supplement`);
+  expect("compare: degenerate lists every candidate", !!scmp && scmp.items.length === supp.candidates.length,
+    `items=${scmp?.items.length}`);
+  expect("compare: degenerate radar disabled (<2 series)", !!scmp && scmp.radar_default.series.length < 2,
+    `series=${JSON.stringify(scmp?.radar_default.series)}`);
+  expect("compare: degenerate fabricates no pick", !!scmp && !scmp.items.some((it) => it.status === "pick"),
+    `a pick status was fabricated`);
+
+  // Sidecar schema-validity: buildComparison output validates against store-compare.schema.json for every golden.
+  for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient", "safety-supplement"]) {
+    const out = buildComparison(load(`evals/golden/${name}.json`));
+    out.id = `test-${name}`; // the writer stamps a real id; supply one so the required field is present
+    expect(`compare: sidecar validates against schema (${name})`, validateCompare(out),
+      `schema violations: ${(validateCompare.errors || []).map((e) => e.instancePath + " " + e.message).join("; ")}`);
   }
 }
 
@@ -1213,4 +1485,4 @@ if (failures.length) {
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + multi-angle coverage + store-index schema + example store).`);
+console.log(`OK — ${checks} logic checks passed (clustering + R1 ranking + affiliate weighting + decision engine + confidence calibration + gift switch + offer calibration + rendering + capability orchestration + fail-closed governance + subagent-output validation + category-widening gate + live-smoke checker + multi-angle coverage + store-index schema + example store + candidate-comparison model).`);

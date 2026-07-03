@@ -5,11 +5,13 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { renderReport } from "./render.mjs";
+import { buildComparison } from "./compare.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ajv = new Ajv2020({ allErrors: true, strict: false }); addFormats(ajv);
 const validateRec = ajv.compile(JSON.parse(readFileSync(join(root,"schemas/recommendation-object.schema.json"),"utf8")));
 const validateIndex = ajv.compile(JSON.parse(readFileSync(join(root,"schemas/store-index.schema.json"),"utf8")));
+const validateCompare = ajv.compile(JSON.parse(readFileSync(join(root,"schemas/store-compare.schema.json"),"utf8")));
 
 const slug = (s) => String(s ?? "run").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40) || "run";
 export function makeId(rec, nowIso) {
@@ -26,10 +28,12 @@ const entryOf = (rec, id, nowIso) => ({
   beneficiary_type: rec?.beneficiary?.type === "recipient" ? "recipient" : "self",
   outcome: rec?.outcome, reason_code: rec?.reason_code,
   pick: rec?.pick?.product ?? null, confidence_overall: typeof rec?.confidence_overall==="number"?rec.confidence_overall:null,
-  json: `runs/${id}.json`, md: `runs/${id}.md`,
+  json: `runs/${id}.json`, md: `runs/${id}.md`, compare: `runs/${id}.compare.json`,
 });
 
-export function recordRun(rec, { storeDir = "store", now } = {}) {
+// `makeComparison` is injectable purely so the fail-closed guard below is testable — production
+// always uses the real buildComparison (compare.mjs, the single home of comparison logic).
+export function recordRun(rec, { storeDir = "store", now, makeComparison = buildComparison } = {}) {
   if (!validateRec(rec)) throw new Error(`store: refusing to record an invalid Recommendation Object: ${(validateRec.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
   const nowIso = now ?? new Date().toISOString();
   const runs = join(storeDir,"runs");
@@ -43,17 +47,25 @@ export function recordRun(rec, { storeDir = "store", now } = {}) {
   const idx = existsSync(idxPath) ? JSON.parse(readFileSync(idxPath,"utf8")) : [];
   idx.push(entryOf(rec, id, nowIso));
   if (!validateIndex(idx)) throw new Error(`store: index would be invalid: ${(validateIndex.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
-  // All validation passed — now write artifacts + index.
+  // Derive the comparison sidecar and validate it too, fail-closed (design §6b) — a malformed
+  // comparison throws BEFORE any write, exactly like the Object/index, so no partial store results.
+  const comparison = makeComparison(rec); comparison.id = id;
+  if (!validateCompare(comparison)) throw new Error(`store: refusing to record an invalid comparison: ${(validateCompare.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+  // All validation passed — now write artifacts + sidecar + index.
   mkdirSync(runs,{recursive:true});
   writeFileSync(join(runs,id+".json"), JSON.stringify(rec,null,2)+"\n");
   writeFileSync(join(runs,id+".md"), renderReport(rec)+"\n");
+  writeFileSync(join(runs,id+".compare.json"), JSON.stringify(comparison,null,2)+"\n");
   writeFileSync(idxPath, JSON.stringify(idx,null,2)+"\n");
   return { id };
 }
 
-export function rebuildIndex({ storeDir = "store" } = {}) {
+export function rebuildIndex({ storeDir = "store", makeComparison = buildComparison } = {}) {
   const runs = join(storeDir,"runs");
-  const files = existsSync(runs) ? readdirSync(runs).filter(f=>f.endsWith(".json")).sort() : []; // id-prefix sorts chronologically
+  const files = existsSync(runs) ? readdirSync(runs).filter(f=>f.endsWith(".json")&&!f.endsWith(".compare.json")).sort() : []; // id-prefix sorts chronologically; skip sidecars
+  // Collect the sidecar writes but DON'T flush them until every run + comparison + the whole index
+  // validates — the same validate-all-before-mutate discipline recordRun uses (no partial back-fill).
+  const sidecars = [];
   const idx = files.map(f => {
     // A syntactically broken run (truncated/corrupt) throws a bare parse error
     // WITHOUT the filename — wrap it so the operator can find the offending file.
@@ -63,10 +75,17 @@ export function rebuildIndex({ storeDir = "store" } = {}) {
     // Fail-closed (consistent with recordRun): never index a malformed run with
     // default fields — throw, naming the offending file.
     if (!validateRec(rec)) throw new Error(`store: refusing to index invalid run ${f}: ${(validateRec.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
-    return entryOf(rec, basename(f,".json"));
+    const id = basename(f,".json");
+    // Back-fill the comparison sidecar for this run, fail-closed (design §6b/§8) — an invalid
+    // comparison throws (naming the file) before any write.
+    const comparison = makeComparison(rec); comparison.id = id;
+    if (!validateCompare(comparison)) throw new Error(`store: refusing to index run ${f}: invalid comparison: ${(validateCompare.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
+    sidecars.push([join(runs, id+".compare.json"), JSON.stringify(comparison,null,2)+"\n"]);
+    return entryOf(rec, id);
   });
   if (!validateIndex(idx)) throw new Error("store: rebuilt index invalid");
   mkdirSync(storeDir,{recursive:true}); // ensure a missing/custom store dir yields a valid empty index, not ENOENT
+  for (const [p,c] of sidecars) writeFileSync(p, c);
   writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2)+"\n");
   return { count: idx.length };
 }

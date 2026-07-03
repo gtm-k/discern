@@ -56,13 +56,62 @@ Each entry has the following fields:
 | `confidence_overall` | no | Overall confidence score (0..1), or `null` |
 | `json` | yes | Relative path to the run JSON (`runs/<id>.json`) |
 | `md` | yes | Relative path to the pre-rendered report (`runs/<id>.md`) |
+| `compare` | no | Relative path to the comparison sidecar (`runs/<id>.compare.json`); absent on stores written before the sidecar existed |
 
 The `.md` file is produced by `tools/render.mjs` at write time. The Go viewer reads and displays it as-is;
 there is no rendering in Go. `tools/render.mjs` is the single renderer.
 
-`json` and `md` are always `runs/<id>.{json,md}` relative paths (enforced by the schema's `pattern`). The
-viewer treats these as untrusted on a shared or hand-edited store: it rejects any path that is absolute or
-escapes the store directory, so a tampered index cannot make the viewer read files outside `store/`.
+`json`, `md`, and `compare` are always `runs/<id>.{json,md,compare.json}` relative paths (enforced by the
+schema's `pattern`). The viewer treats these as untrusted on a shared or hand-edited store: it rejects any
+path that is absolute or escapes the store directory, so a tampered index cannot make the viewer read files
+outside `store/`. `compare` is optional for back-compat — an old store without it still validates, and the
+viewer shows "no comparison — run `reindex` to generate" for that run.
+
+## Comparison sidecar — `runs/<id>.compare.json`
+
+Alongside each run the writer persists a **comparison sidecar**, a derived view artifact governed by
+[`schemas/store-compare.schema.json`](../schemas/store-compare.schema.json). It is computed by
+`tools/compare.mjs` (`buildComparison(rec)`, a pure function) and validated fail-closed before it is
+written — exactly like the Recommendation Object and the index. It is **not** a change to the recommendation
+contract (`schemas/recommendation-object.schema.json` is untouched); it is a scannable projection of data
+already in the run.
+
+The sidecar drives the viewer's **comparison view** — a dense heatmap tableau (plus an optional radar) over
+the full considered set. Its shape:
+
+```json
+{
+  "id": "<run id>",
+  "need": "…",
+  "axes": ["fundamentals", "consensus", "evidence", "clean"],
+  "dealbreaker_rules": ["… the run's hard-filter rules …"],
+  "counts": { "considered": 4, "eligible": 3, "removed": 1 },
+  "radar_default": { "series": ["<pick>", "<top rival>"] },
+  "items": [ { "product": "…", "maker": "…", "status": "pick",
+              "disqualified_reason": null, "dealbreaker_rule": null,
+              "durable_unresolved": false,
+              "scores": { "fundamentals": 0.82, "consensus_raw": 3,
+                          "consensus_norm": 1.0, "evidence": 0.71, "clean": 0.9 } } ]
+}
+```
+
+**The four axes** (all derived from today's data; no per-feature scores yet):
+
+| Axis | Source | Honesty rule |
+|---|---|---|
+| **Fundamentals** | `shortlist[].fundamentals_card.fundamentals_score` | `null` (shown `—`) when not shortlisted — never `0` |
+| **Consensus** | `candidates[].recurrence_over_clusters` (raw count) | `consensus_norm` = raw ÷ max over the **eligible** set; `null` for removed items |
+| **Evidence** | mean of `candidates[].evidence[].claim_confidence` | always present (schema requires ≥1 evidence) |
+| **Clean** | `1 − Σ penalty(counterevidence)` clamped 0..1 | penalty ordering `recall > defect ≈ reliability > dissent > other`; a `dealbreaker` does **not** penalize — it disqualifies; `null` when removed or not shortlisted |
+
+**Observability (normative):** every `candidates[]` entry is listed — eligible *and* removed. A removed
+item stays visible (struck-through, **scores intact**), tagged with the specific `dealbreaker_rule` and the
+reason `detail`, so a hard filter reads as "removed by rule, regardless of merit." The `dealbreaker_rules`
+legend and an `N considered · M eligible · K removed` completeness line are always shown. `status` is one of
+`pick | runner_up | eligible | not_shortlisted | disqualified`.
+
+`reindex` back-fills sidecars for existing runs, so runs recorded before the sidecar existed gain a
+comparison with no agent re-run.
 
 ## Privacy / gitignore
 
@@ -123,11 +172,19 @@ UI.
 |---|---|---|
 | List | `↑` / `↓` | Navigate runs |
 | List | `Enter` | Open selected run (view report) |
+| List | `c` | Open the comparison view for the selected run |
 | List | `/` | Enter filter |
 | List | `q` or `Ctrl+C` | Quit |
 | Detail | `↑` / `↓` | Scroll report |
+| Detail | `c` | Open the comparison view for this run |
 | Detail | `Esc` or `q` | Back to list |
 | Detail | `Ctrl+C` | Quit |
+| Compare | `1`–`4` | Sort by axis (Fundamentals / Consensus / Evidence / Clean); removed rows always sink to the bottom |
+| Compare | `r` | Toggle the radar (pick vs. top rival); disabled when fewer than 2 eligible series |
+| Compare | `tab` | Cycle the radar's rival series |
+| Compare | `Enter` | Open the full prose report for this run |
+| Compare | `Esc` or `q` | Back to list |
+| Compare | `Ctrl+C` | Quit |
 | Filter | `type` | Edit filter query |
 | Filter | `Enter` or `Esc` | Apply filter and return to list |
 | Filter | `Ctrl+C` | Quit |

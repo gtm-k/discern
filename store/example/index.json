@@ -10,6 +10,7 @@
     "pick": "Sony WH-1000XM5",
     "confidence_overall": 0.82,
     "json": "runs/20260623T100000Z-over-ear-noise-cancelling-headphones-for.json",
-    "md": "runs/20260623T100000Z-over-ear-noise-cancelling-headphones-for.md"
+    "md": "runs/20260623T100000Z-over-ear-noise-cancelling-headphones-for.md",
+    "compare": "runs/20260623T100000Z-over-ear-noise-cancelling-headphones-for.compare.json"
   }
 ]

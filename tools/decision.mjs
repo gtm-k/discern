@@ -12,6 +12,7 @@
 // prove the rules move the pick the right way.
 
 import { rankCandidates } from "./grid.mjs";
+import { isDisqualified } from "./disqualify.mjs";
 
 const HIGH_BAND = 0.8;       // docs/definitions.md §6: confidence >= 0.80 is the "high" band.
 const RETURN_BONUS = 0.05;   // gift branch: returnability is weighted up (definitions.md §5.4).
@@ -83,7 +84,7 @@ export function rankingModel(rec) {
         fundamentals_score: s.fundamentals_card?.fundamentals_score ?? 0,
         recurrence_over_clusters: cand?.recurrence_over_clusters ?? 0,
         recalled: (s.counterevidence ?? []).some((c) => c.kind === "recall"),
-        disqualified: (s.counterevidence ?? []).some((c) => c.kind === "dealbreaker"),
+        disqualified: isDisqualified(s.counterevidence), // shared predicate (disqualify.mjs) — single source.
         joinMissing: !cand,
       };
     });

@@ -24,6 +24,60 @@ type Entry struct {
 	Confidence  *float64 `json:"confidence_overall"`
 	JSON        string   `json:"json"`
 	MD          string   `json:"md"`
+	// Compare points at the runs/<id>.compare.json sidecar (the comparison
+	// view artifact). Optional in the index: an old store written before the
+	// sidecar existed unmarshals this to nil ("no comparison — reindex").
+	Compare *string `json:"compare"`
+}
+
+// Comparison mirrors runs/<id>.compare.json field-for-field (reader side of the
+// seam). The Node writer (tools/compare.mjs) is the sole author; Go only plots.
+// It is governed by schemas/store-compare.schema.json — the two sides agree by
+// construction, and the seam test parses a Node-written sidecar to prove it.
+type Comparison struct {
+	ID               string        `json:"id"`
+	Need             string        `json:"need"`
+	Axes             []string      `json:"axes"`
+	DealbreakerRules []string      `json:"dealbreaker_rules"`
+	Counts           Counts        `json:"counts"`
+	RadarDefault     RadarDefault  `json:"radar_default"`
+	Items            []CompareItem `json:"items"`
+}
+
+// Counts is the completeness summary: considered = eligible + removed.
+type Counts struct {
+	Considered int `json:"considered"`
+	Eligible   int `json:"eligible"`
+	Removed    int `json:"removed"`
+}
+
+// RadarDefault names the series the radar overlays by default (pick + rival).
+// 0..2 entries; fewer than 2 means the radar is disabled for this run.
+type RadarDefault struct {
+	Series []string `json:"series"`
+}
+
+// CompareItem is one row of the tableau — one candidate considered by the run.
+type CompareItem struct {
+	Product            string  `json:"product"`
+	Maker              string  `json:"maker"`
+	Status             string  `json:"status"`
+	DisqualifiedReason *string `json:"disqualified_reason"`
+	DealbreakerRule    *string `json:"dealbreaker_rule"`
+	DurableUnresolved  bool    `json:"durable_unresolved"`
+	Scores             Scores  `json:"scores"`
+}
+
+// Scores holds the four derived axis values. Nullable fields are pointers so an
+// honest null (not scored / not plotted) survives the round-trip and is not
+// silently coerced to 0: fundamentals is nil when not shortlisted; consensus_norm
+// and clean are nil for disqualified items.
+type Scores struct {
+	Fundamentals  *float64 `json:"fundamentals"`
+	ConsensusRaw  int      `json:"consensus_raw"`
+	ConsensusNorm *float64 `json:"consensus_norm"`
+	Evidence      float64  `json:"evidence"`
+	Clean         *float64 `json:"clean"`
 }
 
 // Load reads <dir>/index.json and returns all entries.
@@ -48,17 +102,56 @@ func Load(dir string) ([]Entry, error) {
 // hand-edited store; ReadReport contains it within dir and rejects any path that
 // is absolute or escapes the store (e.g. "../../etc/passwd", "..\\x").
 func ReadReport(dir, mdRel string) (string, error) {
-	if filepath.IsAbs(mdRel) {
-		return "", fmt.Errorf("report path must be relative: %q", mdRel)
+	realFull, err := containedPath(dir, mdRel)
+	if err != nil {
+		return "", err
 	}
-	full := filepath.Join(dir, mdRel)
+	b, err := os.ReadFile(realFull)
+	if err != nil {
+		return "", fmt.Errorf("read report %q: %w", mdRel, err)
+	}
+	return string(b), nil
+}
+
+// LoadComparison reads and parses the comparison sidecar at <dir>/<compareRel>.
+// compareRel comes from the index.json `compare` field and is untrusted exactly
+// like `md`, so LoadComparison reuses the SAME containment + symlink guards as
+// ReadReport (via containedPath) — a compare path is equally capable of trying
+// to escape a shared or hand-edited store. Returns nil + error on any escape,
+// missing file, or malformed JSON.
+func LoadComparison(dir, compareRel string) (*Comparison, error) {
+	realFull, err := containedPath(dir, compareRel)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(realFull)
+	if err != nil {
+		return nil, fmt.Errorf("read comparison %q: %w", compareRel, err)
+	}
+	var c Comparison
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
+	}
+	return &c, nil
+}
+
+// containedPath validates that rel is a store-relative path staying within dir —
+// both lexically and after symlink resolution — and returns the real (symlink-
+// resolved) absolute path safe to read. rel is untrusted (from index.json). The
+// four gates are the SINGLE source of "inside the store" containment, shared by
+// ReadReport and LoadComparison so the two readers can never drift on it.
+func containedPath(dir, rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("store path must be relative: %q", rel)
+	}
+	full := filepath.Join(dir, rel)
 	// First gate: lexical containment rejects ".."-escaping path strings.
 	if !contained(dir, full) {
-		return "", fmt.Errorf("report path escapes store: %q", mdRel)
+		return "", fmt.Errorf("store path escapes store: %q", rel)
 	}
 	// Second gate: resolve symlinks and re-verify containment, so a symlink
 	// INSIDE the store cannot redirect the read to a target OUTSIDE it. The
-	// lexical check on "runs/x.md" passes for a symlink (no ".." in the string),
+	// lexical check on "runs/x.json" passes for a symlink (no ".." in the string),
 	// so this resolved-path check is what actually blocks the escape.
 	realDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -69,16 +162,12 @@ func ReadReport(dir, mdRel string) (string, error) {
 		// Missing file or broken symlink: nothing to leak. Surface as a normal
 		// read error, not the escape error, so a safe-but-missing path is not
 		// mislabeled as a traversal attempt.
-		return "", fmt.Errorf("read report %q: %w", mdRel, err)
+		return "", fmt.Errorf("resolve store path %q: %w", rel, err)
 	}
 	if !contained(realDir, realFull) {
-		return "", fmt.Errorf("report path escapes store (symlink): %q", mdRel)
+		return "", fmt.Errorf("store path escapes store (symlink): %q", rel)
 	}
-	b, err := os.ReadFile(realFull)
-	if err != nil {
-		return "", fmt.Errorf("read report %q: %w", mdRel, err)
-	}
-	return string(b), nil
+	return realFull, nil
 }
 
 // contained reports whether p resolves to base or a descendant of base — i.e.
