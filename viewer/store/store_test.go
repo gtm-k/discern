@@ -212,6 +212,11 @@ func TestLoadComparisonRejectsInvalid(t *testing.T) {
 		"missing need":               strings.Replace(base, `"need":"n",`, "", 1),
 		"missing dealbreaker_rules":  strings.Replace(base, `"dealbreaker_rules":[],`, "", 1),
 		"missing radar_default":      strings.Replace(base, `"radar_default":{"series":["A"]},`, "", 1),
+		// Nested omissions (a hand-edited store dropping a required field below the top level).
+		"missing items[].scores":     strings.Replace(base, `,"scores":{"fundamentals":0.5,"consensus_raw":1,"consensus_norm":1,"evidence":0.5,"clean":1}`, "", 1),
+		"missing a score field":      strings.Replace(base, `"consensus_norm":1,`, "", 1),
+		"missing counts field":       strings.Replace(base, `"eligible":1,`, "", 1),
+		"missing radar series":       strings.Replace(base, `{"series":["A"]}`, `{}`, 1),
 	}
 	i := 0
 	for name, body := range cases {

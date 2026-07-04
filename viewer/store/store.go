@@ -150,6 +150,31 @@ func LoadComparison(dir, compareRel string) (*Comparison, error) {
 			return nil, fmt.Errorf("invalid comparison %q: missing required field %q", compareRel, k)
 		}
 	}
+	// Nested required-field presence: the top-level check proves only that the keys
+	// exist; a hand-edited store could still omit a NESTED required field (e.g.
+	// items[].scores), which would zero-value into false null/zero axes. The schema's
+	// object tree is shallow and finite — root → {counts, radar_default, items[] →
+	// scores}, with only scalars below scores — so checking every level is exhaustive.
+	if err := subKeys(raw, "counts", "considered", "eligible", "removed"); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
+	if err := subKeys(raw, "radar_default", "series"); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
+	var rawItems []map[string]json.RawMessage
+	if err := json.Unmarshal(raw["items"], &rawItems); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: items: %w", compareRel, err)
+	}
+	for i, it := range rawItems {
+		for _, k := range []string{"product", "maker", "status", "disqualified_reason", "dealbreaker_rule", "durable_unresolved", "scores"} {
+			if _, ok := it[k]; !ok {
+				return nil, fmt.Errorf("invalid comparison %q: items[%d]: missing required field %q", compareRel, i, k)
+			}
+		}
+		if err := subKeys(it, "scores", "fundamentals", "consensus_raw", "consensus_norm", "evidence", "clean"); err != nil {
+			return nil, fmt.Errorf("invalid comparison %q: items[%d].%w", compareRel, i, err)
+		}
+	}
 	// Pass 2 — strict typed decode (reject unknown fields) + invariant validation.
 	var c Comparison
 	d2 := json.NewDecoder(bytes.NewReader(b))
@@ -171,6 +196,22 @@ var compareAxes = [...]string{"fundamentals", "consensus", "evidence", "clean"}
 // `required` set of schemas/store-compare.schema.json). Enforcing presence stops an
 // omitted field from silently zero-valuing into an accepted-but-false comparison.
 var requiredCompareKeys = []string{"id", "need", "axes", "dealbreaker_rules", "counts", "radar_default", "items"}
+
+// subKeys unmarshals raw[key] as a JSON object and requires each named field to be
+// PRESENT (value may be null — only omission is rejected). Used for the nested contract
+// objects the top-level presence check cannot reach.
+func subKeys(raw map[string]json.RawMessage, key string, required ...string) error {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw[key], &obj); err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	for _, k := range required {
+		if _, ok := obj[k]; !ok {
+			return fmt.Errorf("%s: missing required field %q", key, k)
+		}
+	}
+	return nil
+}
 
 // validStatus is the closed set of item statuses (mirrors the schema enum).
 var validStatus = map[string]bool{
