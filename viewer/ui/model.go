@@ -131,9 +131,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = filterView
 			cmd := m.filter.Focus()
 			return m, cmd
-		case "enter":
-			return m.openDetail()
-		case "c":
+		case "enter", "c":
+			// Enter opens the comparison GRID first (the scannable overview); the
+			// prose report is reached from the grid via Enter.
 			return m.openCompare()
 		}
 	}
@@ -148,6 +148,15 @@ func (m Model) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "esc", "q":
+			// Drill back to the comparison grid we came in from. The shared viewport
+			// currently holds the prose report, so re-render the grid into it. If no
+			// grid is loaded (defensive), fall back to the list.
+			if m.comparison != nil {
+				m.state = compareView
+				m.viewport.SetContent(renderCompare(m))
+				m.viewport.GotoTop()
+				return m, nil
+			}
 			m.state = listView
 			return m, nil
 		case "c":
@@ -329,7 +338,7 @@ func defaultRivalIdx(c *store.Comparison) int {
 func (m Model) View() string {
 	switch m.state {
 	case detailView:
-		return m.viewport.View() + "\n" + helpStyle.Render("↑/↓ scroll · c compare · esc back · ctrl+c quit")
+		return m.viewport.View() + "\n" + helpStyle.Render("↑/↓ scroll · esc back to grid · ctrl+c quit")
 	case filterView:
 		return m.filter.View() + "\n" + m.table.View() + "\n" +
 			helpStyle.Render("type to filter · enter/esc apply · ctrl+c quit")
@@ -341,7 +350,7 @@ func (m Model) View() string {
 		return m.viewport.View() + "\n" + helpStyle.Render(compareHelp(m))
 	default: // listView
 		return m.table.View() + "\n" +
-			helpStyle.Render("↑/↓ move · enter detail · c compare · / filter · q quit")
+			helpStyle.Render("↑/↓ move · enter compare · / filter · q quit")
 	}
 }
 

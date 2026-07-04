@@ -26,11 +26,14 @@ func exampleModel(t *testing.T) Model {
 	return New(exampleDir, es)
 }
 
-func TestEnterOpensDetail(t *testing.T) {
-	m := New(exampleDir, []store.Entry{{ID: "x", Need: "n", Outcome: "RECOMMEND", MD: "runs/x.md"}})
+func TestEnterOpensCompare(t *testing.T) {
+	m := exampleModel(t)
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if nm.(Model).state != detailView {
-		t.Fatal("Enter should open detail")
+	if nm.(Model).state != compareView {
+		t.Fatal("Enter should open the comparison grid first")
+	}
+	if nm.(Model).comparison == nil {
+		t.Fatal("comparison should be loaded on Enter")
 	}
 }
 
@@ -55,16 +58,21 @@ func TestOpenCompareFromList(t *testing.T) {
 	}
 }
 
-// TestOpenCompareFromDetail: `c` is also reachable from a run's detail view (§9).
-func TestOpenCompareFromDetail(t *testing.T) {
+// TestDetailBacksToCompare: the drill-down is list -> grid -> report, and esc from
+// the report returns to the GRID (not straight to the list).
+func TestDetailBacksToCompare(t *testing.T) {
 	m := exampleModel(t)
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // -> detail
-	if nm.(Model).state != detailView {
-		t.Fatal("Enter should open detail")
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // list -> comparison grid
+	if nm.(Model).state != compareView {
+		t.Fatal("Enter should open the comparison grid")
 	}
-	nm2, _ := nm.(Model).Update(runeKey('c'))
-	if nm2.(Model).state != compareView {
-		t.Fatal("`c` from detail should open compareView")
+	nm2, _ := nm.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter}) // grid -> detail report
+	if nm2.(Model).state != detailView {
+		t.Fatal("Enter from the grid should open the detail report")
+	}
+	nm3, _ := nm2.(Model).Update(tea.KeyMsg{Type: tea.KeyEsc}) // report -> back to grid
+	if nm3.(Model).state != compareView {
+		t.Fatal("esc from the report should return to the comparison grid")
 	}
 }
 
