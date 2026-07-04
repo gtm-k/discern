@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -129,14 +130,31 @@ func LoadComparison(dir, compareRel string) (*Comparison, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read comparison %q: %w", compareRel, err)
 	}
-	// Strict decode: the sidecar is the seam contract and a shared/hand-edited store is
-	// untrusted (parity with the path guards above), so reject unknown fields and then
-	// enforce the contract invariants JSON alone can't — a malformed comparison must fail
-	// closed rather than render a false completeness line or invalid statuses.
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.DisallowUnknownFields()
+	// The sidecar is the seam contract and a shared/hand-edited store is untrusted, so fail
+	// closed on ANY deviation (parity with the path guards above): trailing data, a missing
+	// required field (which would zero-value into a blank title / empty legend / disabled
+	// radar), an unknown field, or a broken invariant.
+	//
+	// Pass 1 — presence of every required top-level key + no trailing data. Decoding into a
+	// struct cannot distinguish an omitted field from a zero value, so check the raw keys.
+	var raw map[string]json.RawMessage
+	d1 := json.NewDecoder(bytes.NewReader(b))
+	if err := d1.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
+	}
+	if err := d1.Decode(new(json.RawMessage)); err != io.EOF {
+		return nil, fmt.Errorf("invalid comparison %q: unexpected trailing data", compareRel)
+	}
+	for _, k := range requiredCompareKeys {
+		if _, ok := raw[k]; !ok {
+			return nil, fmt.Errorf("invalid comparison %q: missing required field %q", compareRel, k)
+		}
+	}
+	// Pass 2 — strict typed decode (reject unknown fields) + invariant validation.
 	var c Comparison
-	if err := dec.Decode(&c); err != nil {
+	d2 := json.NewDecoder(bytes.NewReader(b))
+	d2.DisallowUnknownFields()
+	if err := d2.Decode(&c); err != nil {
 		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
 	}
 	if err := c.validate(); err != nil {
@@ -148,6 +166,11 @@ func LoadComparison(dir, compareRel string) (*Comparison, error) {
 // compareAxes is the canonical axis order every sidecar must carry (mirrors
 // tools/compare.mjs AXES and schemas/store-compare.schema.json).
 var compareAxes = [...]string{"fundamentals", "consensus", "evidence", "clean"}
+
+// requiredCompareKeys are the top-level fields every sidecar must carry (mirrors the
+// `required` set of schemas/store-compare.schema.json). Enforcing presence stops an
+// omitted field from silently zero-valuing into an accepted-but-false comparison.
+var requiredCompareKeys = []string{"id", "need", "axes", "dealbreaker_rules", "counts", "radar_default", "items"}
 
 // validStatus is the closed set of item statuses (mirrors the schema enum).
 var validStatus = map[string]bool{

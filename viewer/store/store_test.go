@@ -197,14 +197,21 @@ func TestLoadComparisonRejectsInvalid(t *testing.T) {
 		t.Fatalf("valid sidecar: want load, got %v err=%v", got, err)
 	}
 
-	// Each mutation breaks exactly one invariant and must fail closed (error + nil).
+	// Each mutation breaks exactly one part of the contract and must fail closed (error + nil):
+	// unknown fields, bad enums, inconsistent counts, wrong axes, bad radar, trailing data, and
+	// every omitted required top-level field (which would otherwise zero-value into a blank view).
 	cases := map[string]string{
-		"unknown field":       strings.Replace(base, `"items":[`, `"bogus":1,"items":[`, 1),
-		"bad status":          strings.Replace(base, `"status":"pick"`, `"status":"nope"`, 1),
-		"inconsistent counts":  strings.Replace(base, `"considered":1`, `"considered":2`, 1),
-		"wrong axes":          strings.Replace(base, `,"consensus","evidence","clean"]`, `,"consensus","evidence"]`, 1),
-		"oversized radar":     strings.Replace(base, `"series":["A"]`, `"series":["A","A","A"]`, 1),
-		"dangling radar":      strings.Replace(base, `"series":["A"]`, `"series":["ZZZ"]`, 1),
+		"unknown field":              strings.Replace(base, `"items":[`, `"bogus":1,"items":[`, 1),
+		"bad status":                 strings.Replace(base, `"status":"pick"`, `"status":"nope"`, 1),
+		"inconsistent counts":        strings.Replace(base, `"considered":1`, `"considered":2`, 1),
+		"wrong axes":                 strings.Replace(base, `,"consensus","evidence","clean"]`, `,"consensus","evidence"]`, 1),
+		"oversized radar":            strings.Replace(base, `"series":["A"]`, `"series":["A","A","A"]`, 1),
+		"dangling radar":             strings.Replace(base, `"series":["A"]`, `"series":["ZZZ"]`, 1),
+		"trailing data":              base + " {}",
+		"missing id":                 strings.Replace(base, `"id":"x",`, "", 1),
+		"missing need":               strings.Replace(base, `"need":"n",`, "", 1),
+		"missing dealbreaker_rules":  strings.Replace(base, `"dealbreaker_rules":[],`, "", 1),
+		"missing radar_default":      strings.Replace(base, `"radar_default":{"series":["A"]},`, "", 1),
 	}
 	i := 0
 	for name, body := range cases {
