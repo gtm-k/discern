@@ -197,6 +197,15 @@ var compareAxes = [...]string{"fundamentals", "consensus", "evidence", "clean"}
 // omitted field from silently zero-valuing into an accepted-but-false comparison.
 var requiredCompareKeys = []string{"id", "need", "axes", "dealbreaker_rules", "counts", "radar_default", "items"}
 
+// scoresInRange reports whether an item's numeric scores are within contract bounds:
+// fundamentals/consensus_norm/evidence/clean in [0,1] (null allowed for the nullable
+// ones), consensus_raw >= 0. Mirrors the numeric bounds in store-compare.schema.json so
+// a hand-edited sidecar with impossible values fails closed instead of sorting to the top.
+func scoresInRange(s Scores) bool {
+	unit := func(p *float64) bool { return p == nil || (*p >= 0 && *p <= 1) }
+	return unit(s.Fundamentals) && unit(s.ConsensusNorm) && unit(&s.Evidence) && unit(s.Clean) && s.ConsensusRaw >= 0
+}
+
 // subKeys unmarshals raw[key] as a JSON object and requires each named field to be
 // PRESENT (value may be null — only omission is rejected). Used for the nested contract
 // objects the top-level presence check cannot reach.
@@ -246,6 +255,9 @@ func (c *Comparison) validate() error {
 			return fmt.Errorf("items: duplicate product %q", it.Product)
 		}
 		byProduct[it.Product] = it
+		if !scoresInRange(it.Scores) {
+			return fmt.Errorf("items[%d] %q: score out of range (normalized axes must be 0..1, consensus_raw >= 0)", i, it.Product)
+		}
 		switch it.Status {
 		case "disqualified":
 			removed++

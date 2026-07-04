@@ -217,6 +217,9 @@ func TestLoadComparisonRejectsInvalid(t *testing.T) {
 		"missing a score field":      strings.Replace(base, `"consensus_norm":1,`, "", 1),
 		"missing counts field":       strings.Replace(base, `"eligible":1,`, "", 1),
 		"missing radar series":       strings.Replace(base, `{"series":["A"]}`, `{}`, 1),
+		// Out-of-range numeric scores (a hand-edited sidecar could sort an item to the top).
+		"fundamentals out of range":  strings.Replace(base, `"fundamentals":0.5`, `"fundamentals":2`, 1),
+		"negative consensus_raw":     strings.Replace(base, `"consensus_raw":1`, `"consensus_raw":-3`, 1),
 	}
 	i := 0
 	for name, body := range cases {

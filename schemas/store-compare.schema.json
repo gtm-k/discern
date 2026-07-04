@@ -27,8 +27,8 @@
           "scores":{"type":"object","additionalProperties":false,
             "required":["fundamentals","consensus_raw","consensus_norm","evidence","clean"],
             "properties":{
-              "fundamentals":{"type":["number","null"]},
-              "consensus_raw":{"type":"integer"},
-              "consensus_norm":{"type":["number","null"]},
-              "evidence":{"type":"number"},
-              "clean":{"type":["number","null"]}}}}}}}}
+              "fundamentals":{"type":["number","null"],"minimum":0,"maximum":1},
+              "consensus_raw":{"type":"integer","minimum":0},
+              "consensus_norm":{"type":["number","null"],"minimum":0,"maximum":1},
+              "evidence":{"type":"number","minimum":0,"maximum":1},
+              "clean":{"type":["number","null"],"minimum":0,"maximum":1}}}}}}}}

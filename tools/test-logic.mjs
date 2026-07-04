@@ -1514,6 +1514,13 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   expect("compare: fail-closed on dangling shortlist product", dslThrew,
     "buildComparison did not throw on a shortlist product not among the candidates");
 
+  // Numeric bounds (Codex review): normalized axes must be 0..1 and consensus_raw >= 0 — the
+  // schema must reject impossible values a hand-edited sidecar could carry.
+  const outHi = JSON.parse(JSON.stringify(cmp)); outHi.items[0].scores.fundamentals = 2;
+  expect("compare: schema rejects fundamentals > 1", !validateCompare(outHi), "schema accepted fundamentals=2");
+  const outNeg = JSON.parse(JSON.stringify(cmp)); outNeg.items[0].scores.consensus_raw = -3;
+  expect("compare: schema rejects negative consensus_raw", !validateCompare(outNeg), "schema accepted consensus_raw=-3");
+
   // Sidecar schema-validity: buildComparison output validates against store-compare.schema.json for every golden.
   for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient", "safety-supplement"]) {
     const out = buildComparison(load(`evals/golden/${name}.json`));
