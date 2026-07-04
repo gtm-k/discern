@@ -10,4 +10,5 @@
       "pick":{"type":["string","null"]},
       "confidence_overall":{"type":["number","null"]},
       "json":{"type":"string","pattern":"^runs/[^/\\\\]+\\.json$"},
-      "md":{"type":"string","pattern":"^runs/[^/\\\\]+\\.md$"}}}}
+      "md":{"type":"string","pattern":"^runs/[^/\\\\]+\\.md$"},
+      "compare":{"type":"string","pattern":"^runs/[^/\\\\]+\\.compare\\.json$"}}}}

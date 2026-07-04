@@ -1,9 +1,11 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,6 +26,60 @@ type Entry struct {
 	Confidence  *float64 `json:"confidence_overall"`
 	JSON        string   `json:"json"`
 	MD          string   `json:"md"`
+	// Compare points at the runs/<id>.compare.json sidecar (the comparison
+	// view artifact). Optional in the index: an old store written before the
+	// sidecar existed unmarshals this to nil ("no comparison — reindex").
+	Compare *string `json:"compare"`
+}
+
+// Comparison mirrors runs/<id>.compare.json field-for-field (reader side of the
+// seam). The Node writer (tools/compare.mjs) is the sole author; Go only plots.
+// It is governed by schemas/store-compare.schema.json — the two sides agree by
+// construction, and the seam test parses a Node-written sidecar to prove it.
+type Comparison struct {
+	ID               string        `json:"id"`
+	Need             string        `json:"need"`
+	Axes             []string      `json:"axes"`
+	DealbreakerRules []string      `json:"dealbreaker_rules"`
+	Counts           Counts        `json:"counts"`
+	RadarDefault     RadarDefault  `json:"radar_default"`
+	Items            []CompareItem `json:"items"`
+}
+
+// Counts is the completeness summary: considered = eligible + removed.
+type Counts struct {
+	Considered int `json:"considered"`
+	Eligible   int `json:"eligible"`
+	Removed    int `json:"removed"`
+}
+
+// RadarDefault names the series the radar overlays by default (pick + rival).
+// 0..2 entries; fewer than 2 means the radar is disabled for this run.
+type RadarDefault struct {
+	Series []string `json:"series"`
+}
+
+// CompareItem is one row of the tableau — one candidate considered by the run.
+type CompareItem struct {
+	Product            string  `json:"product"`
+	Maker              string  `json:"maker"`
+	Status             string  `json:"status"`
+	DisqualifiedReason *string `json:"disqualified_reason"`
+	DealbreakerRule    *string `json:"dealbreaker_rule"`
+	DurableUnresolved  bool    `json:"durable_unresolved"`
+	Scores             Scores  `json:"scores"`
+}
+
+// Scores holds the four derived axis values. Nullable fields are pointers so an
+// honest null (not scored / not plotted) survives the round-trip and is not
+// silently coerced to 0: fundamentals is nil when not shortlisted; consensus_norm
+// and clean are nil for disqualified items.
+type Scores struct {
+	Fundamentals  *float64 `json:"fundamentals"`
+	ConsensusRaw  int      `json:"consensus_raw"`
+	ConsensusNorm *float64 `json:"consensus_norm"`
+	Evidence      float64  `json:"evidence"`
+	Clean         *float64 `json:"clean"`
 }
 
 // Load reads <dir>/index.json and returns all entries.
@@ -48,17 +104,221 @@ func Load(dir string) ([]Entry, error) {
 // hand-edited store; ReadReport contains it within dir and rejects any path that
 // is absolute or escapes the store (e.g. "../../etc/passwd", "..\\x").
 func ReadReport(dir, mdRel string) (string, error) {
-	if filepath.IsAbs(mdRel) {
-		return "", fmt.Errorf("report path must be relative: %q", mdRel)
+	realFull, err := containedPath(dir, mdRel)
+	if err != nil {
+		return "", err
 	}
-	full := filepath.Join(dir, mdRel)
+	b, err := os.ReadFile(realFull)
+	if err != nil {
+		return "", fmt.Errorf("read report %q: %w", mdRel, err)
+	}
+	return string(b), nil
+}
+
+// LoadComparison reads and parses the comparison sidecar at <dir>/<compareRel>.
+// compareRel comes from the index.json `compare` field and is untrusted exactly
+// like `md`, so LoadComparison reuses the SAME containment + symlink guards as
+// ReadReport (via containedPath) — a compare path is equally capable of trying
+// to escape a shared or hand-edited store. Returns nil + error on any escape,
+// missing file, or malformed JSON.
+func LoadComparison(dir, compareRel string) (*Comparison, error) {
+	realFull, err := containedPath(dir, compareRel)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(realFull)
+	if err != nil {
+		return nil, fmt.Errorf("read comparison %q: %w", compareRel, err)
+	}
+	// The sidecar is the seam contract and a shared/hand-edited store is untrusted, so fail
+	// closed on ANY deviation (parity with the path guards above): trailing data, a missing
+	// required field (which would zero-value into a blank title / empty legend / disabled
+	// radar), an unknown field, or a broken invariant.
+	//
+	// Pass 1 — presence of every required top-level key + no trailing data. Decoding into a
+	// struct cannot distinguish an omitted field from a zero value, so check the raw keys.
+	var raw map[string]json.RawMessage
+	d1 := json.NewDecoder(bytes.NewReader(b))
+	if err := d1.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
+	}
+	if err := d1.Decode(new(json.RawMessage)); err != io.EOF {
+		return nil, fmt.Errorf("invalid comparison %q: unexpected trailing data", compareRel)
+	}
+	for _, k := range requiredCompareKeys {
+		if _, ok := raw[k]; !ok {
+			return nil, fmt.Errorf("invalid comparison %q: missing required field %q", compareRel, k)
+		}
+	}
+	// Nested required-field presence: the top-level check proves only that the keys
+	// exist; a hand-edited store could still omit a NESTED required field (e.g.
+	// items[].scores), which would zero-value into false null/zero axes. The schema's
+	// object tree is shallow and finite — root → {counts, radar_default, items[] →
+	// scores}, with only scalars below scores — so checking every level is exhaustive.
+	if err := subKeys(raw, "counts", "considered", "eligible", "removed"); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
+	if err := subKeys(raw, "radar_default", "series"); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
+	var rawItems []map[string]json.RawMessage
+	if err := json.Unmarshal(raw["items"], &rawItems); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: items: %w", compareRel, err)
+	}
+	for i, it := range rawItems {
+		for _, k := range []string{"product", "maker", "status", "disqualified_reason", "dealbreaker_rule", "durable_unresolved", "scores"} {
+			if _, ok := it[k]; !ok {
+				return nil, fmt.Errorf("invalid comparison %q: items[%d]: missing required field %q", compareRel, i, k)
+			}
+		}
+		if err := subKeys(it, "scores", "fundamentals", "consensus_raw", "consensus_norm", "evidence", "clean"); err != nil {
+			return nil, fmt.Errorf("invalid comparison %q: items[%d].%w", compareRel, i, err)
+		}
+	}
+	// Pass 2 — strict typed decode (reject unknown fields) + invariant validation.
+	var c Comparison
+	d2 := json.NewDecoder(bytes.NewReader(b))
+	d2.DisallowUnknownFields()
+	if err := d2.Decode(&c); err != nil {
+		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
+	}
+	if err := c.validate(); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
+	return &c, nil
+}
+
+// compareAxes is the canonical axis order every sidecar must carry (mirrors
+// tools/compare.mjs AXES and schemas/store-compare.schema.json).
+var compareAxes = [...]string{"fundamentals", "consensus", "evidence", "clean"}
+
+// requiredCompareKeys are the top-level fields every sidecar must carry (mirrors the
+// `required` set of schemas/store-compare.schema.json). Enforcing presence stops an
+// omitted field from silently zero-valuing into an accepted-but-false comparison.
+var requiredCompareKeys = []string{"id", "need", "axes", "dealbreaker_rules", "counts", "radar_default", "items"}
+
+// scoresInRange reports whether an item's numeric scores are within contract bounds:
+// fundamentals/consensus_norm/evidence/clean in [0,1] (null allowed for the nullable
+// ones), consensus_raw >= 0. Mirrors the numeric bounds in store-compare.schema.json so
+// a hand-edited sidecar with impossible values fails closed instead of sorting to the top.
+func scoresInRange(s Scores) bool {
+	unit := func(p *float64) bool { return p == nil || (*p >= 0 && *p <= 1) }
+	return unit(s.Fundamentals) && unit(s.ConsensusNorm) && unit(&s.Evidence) && unit(s.Clean) && s.ConsensusRaw >= 0
+}
+
+// subKeys unmarshals raw[key] as a JSON object and requires each named field to be
+// PRESENT (value may be null — only omission is rejected). Used for the nested contract
+// objects the top-level presence check cannot reach.
+func subKeys(raw map[string]json.RawMessage, key string, required ...string) error {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw[key], &obj); err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	for _, k := range required {
+		if _, ok := obj[k]; !ok {
+			return fmt.Errorf("%s: missing required field %q", key, k)
+		}
+	}
+	return nil
+}
+
+// validStatus is the closed set of item statuses (mirrors the schema enum).
+var validStatus = map[string]bool{
+	"pick": true, "runner_up": true, "eligible": true, "not_shortlisted": true, "disqualified": true,
+}
+
+// validate enforces the store-compare contract invariants that decoding alone cannot:
+// the fixed axes, the status enum, count consistency (considered == items, removed ==
+// disqualified, eligible == considered-removed), and a radar overlaying at most two series
+// that each name a real item. Returns an error (fail closed) on any breach, so a hand-edited
+// or version-skewed sidecar surfaces as an error instead of a plausible-but-false comparison.
+func (c *Comparison) validate() error {
+	if len(c.Axes) != len(compareAxes) {
+		return fmt.Errorf("axes: want %v, got %v", compareAxes, c.Axes)
+	}
+	for i, a := range compareAxes {
+		if c.Axes[i] != a {
+			return fmt.Errorf("axes[%d]: want %q, got %q", i, a, c.Axes[i])
+		}
+	}
+	byProduct := make(map[string]*CompareItem, len(c.Items))
+	removed, pickCount := 0, 0
+	for i := range c.Items {
+		it := &c.Items[i]
+		if it.Product == "" {
+			return fmt.Errorf("items[%d]: empty product", i)
+		}
+		if !validStatus[it.Status] {
+			return fmt.Errorf("items[%d] %q: invalid status %q", i, it.Product, it.Status)
+		}
+		if _, dup := byProduct[it.Product]; dup {
+			return fmt.Errorf("items: duplicate product %q", it.Product)
+		}
+		byProduct[it.Product] = it
+		if !scoresInRange(it.Scores) {
+			return fmt.Errorf("items[%d] %q: score out of range (normalized axes must be 0..1, consensus_raw >= 0)", i, it.Product)
+		}
+		switch it.Status {
+		case "disqualified":
+			removed++
+		case "pick":
+			pickCount++
+		}
+	}
+	if pickCount > 1 {
+		return fmt.Errorf("items: %d picks, want at most 1", pickCount)
+	}
+	if c.Counts.Considered != len(c.Items) {
+		return fmt.Errorf("counts.considered=%d but %d items", c.Counts.Considered, len(c.Items))
+	}
+	if c.Counts.Removed != removed {
+		return fmt.Errorf("counts.removed=%d but %d disqualified items", c.Counts.Removed, removed)
+	}
+	if c.Counts.Eligible != c.Counts.Considered-c.Counts.Removed {
+		return fmt.Errorf("counts not additive: considered=%d eligible=%d removed=%d",
+			c.Counts.Considered, c.Counts.Eligible, c.Counts.Removed)
+	}
+	// Radar overlays at most two series. A removed (dealbreaker) item is NEVER plotted —
+	// the fail-closed dealbreaker contract must hold in the radar too — series[0] is the
+	// pick, and every plotted series must carry a fundamentals score to draw.
+	if len(c.RadarDefault.Series) > 2 {
+		return fmt.Errorf("radar_default.series: at most 2, got %d", len(c.RadarDefault.Series))
+	}
+	for j, s := range c.RadarDefault.Series {
+		it, ok := byProduct[s]
+		if !ok {
+			return fmt.Errorf("radar_default.series references unknown product %q", s)
+		}
+		if it.Status == "disqualified" {
+			return fmt.Errorf("radar_default.series[%d] %q is disqualified — removed items are never plotted", j, s)
+		}
+		if it.Scores.Fundamentals == nil {
+			return fmt.Errorf("radar_default.series[%d] %q has no fundamentals score to plot", j, s)
+		}
+		if j == 0 && it.Status != "pick" {
+			return fmt.Errorf("radar_default.series[0] %q must be the pick (status %q)", s, it.Status)
+		}
+	}
+	return nil
+}
+
+// containedPath validates that rel is a store-relative path staying within dir —
+// both lexically and after symlink resolution — and returns the real (symlink-
+// resolved) absolute path safe to read. rel is untrusted (from index.json). The
+// four gates are the SINGLE source of "inside the store" containment, shared by
+// ReadReport and LoadComparison so the two readers can never drift on it.
+func containedPath(dir, rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("store path must be relative: %q", rel)
+	}
+	full := filepath.Join(dir, rel)
 	// First gate: lexical containment rejects ".."-escaping path strings.
 	if !contained(dir, full) {
-		return "", fmt.Errorf("report path escapes store: %q", mdRel)
+		return "", fmt.Errorf("store path escapes store: %q", rel)
 	}
 	// Second gate: resolve symlinks and re-verify containment, so a symlink
 	// INSIDE the store cannot redirect the read to a target OUTSIDE it. The
-	// lexical check on "runs/x.md" passes for a symlink (no ".." in the string),
+	// lexical check on "runs/x.json" passes for a symlink (no ".." in the string),
 	// so this resolved-path check is what actually blocks the escape.
 	realDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -69,16 +329,12 @@ func ReadReport(dir, mdRel string) (string, error) {
 		// Missing file or broken symlink: nothing to leak. Surface as a normal
 		// read error, not the escape error, so a safe-but-missing path is not
 		// mislabeled as a traversal attempt.
-		return "", fmt.Errorf("read report %q: %w", mdRel, err)
+		return "", fmt.Errorf("resolve store path %q: %w", rel, err)
 	}
 	if !contained(realDir, realFull) {
-		return "", fmt.Errorf("report path escapes store (symlink): %q", mdRel)
+		return "", fmt.Errorf("store path escapes store (symlink): %q", rel)
 	}
-	b, err := os.ReadFile(realFull)
-	if err != nil {
-		return "", fmt.Errorf("read report %q: %w", mdRel, err)
-	}
-	return string(b), nil
+	return realFull, nil
 }
 
 // contained reports whether p resolves to base or a descendant of base — i.e.

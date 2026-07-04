@@ -19,6 +19,7 @@
 
 import { rankCandidates } from "./grid.mjs";
 import { rankingModel } from "./decision.mjs";
+import { isDisqualified } from "./disqualify.mjs";
 
 const HIGH_BAND = 0.8; // docs/definitions.md §6: confidence >= 0.80 is the "high" band.
 const KNOWN_TIERS = new Set(["search", "fetch", "browser", "api"]); // schema offer.provenance_tier enum.
@@ -127,7 +128,11 @@ function renderGrid(rec, lines) {
   ranked.forEach((row, i) => {
     const flags = [];
     if (row.recalled) flags.push("RECALLED — disqualified");
-    if (row.disqualified) flags.push("DISQUALIFIED — dealbreaker");
+    // Derive the disqualified marker from the SHARED predicate on this item's counterevidence — the
+    // same "renderer recomputes the check itself" discipline renderOffers uses for
+    // offerConfidenceViolation — so the prose grid, the decision engine, and the comparison tableau
+    // stay in lockstep on what "disqualified" means (disqualify.mjs; design §6a/§13).
+    if (isDisqualified(shortByProduct.get(row.product)?.counterevidence)) flags.push("DISQUALIFIED — dealbreaker");
     if (row.joinMissing) flags.push("identity join failed");
     lines.push(
       `${i + 1}. ${safeStr(row.product, "<unknown>")}${row.maker ? ` by ${safeStr(row.maker)}` : ""} — fundamentals ${safeStr(row.fundamentals_score)} · ` +

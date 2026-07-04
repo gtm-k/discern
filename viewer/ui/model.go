@@ -31,6 +31,7 @@ const (
 	listView state = iota
 	detailView
 	filterView
+	compareView
 )
 
 const colGap = 7 // borders + inter-column padding
@@ -50,6 +51,15 @@ type Model struct {
 	table    table.Model
 	viewport viewport.Model
 	filter   textinput.Model
+
+	// Comparison view state. comparison is the loaded sidecar (nil until `c`
+	// opens one); compareErr holds a user-facing message when a sidecar is
+	// absent or unreadable (rendered instead of the tableau, never a panic).
+	comparison *store.Comparison
+	compareErr string
+	sortCol    int  // 0 = status-grouped default; 1..4 = sort by that axis desc
+	radarOn    bool // radar overlay vs tableau
+	rivalIdx   int  // index into eligibleRivals for the radar's second series
 
 	ready  bool // viewport has received a real size at least once
 	width  int
@@ -106,6 +116,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDetail(msg)
 	case filterView:
 		return m.updateFilter(msg)
+	case compareView:
+		return m.updateCompare(msg)
 	}
 	return m, nil
 }
@@ -121,6 +133,8 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case "enter":
 			return m.openDetail()
+		case "c":
+			return m.openCompare()
 		}
 	}
 	var cmd tea.Cmd
@@ -136,8 +150,61 @@ func (m Model) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc", "q":
 			m.state = listView
 			return m, nil
+		case "c":
+			return m.openCompare()
 		}
 	}
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
+}
+
+// updateCompare handles keys in compareView: `r` toggle radar (only when the run
+// has >=2 radar series), `tab` cycle the rival series, `1`-`4` sort by axis, `enter`
+// open the full prose report for the same run, `q`/`esc` back to the list. Any other
+// key (↑/↓, pgup/pgdn, home/end, j/k) SCROLLS the content through the viewport, so
+// removed rows sorted to the bottom of a large run stay reachable. State-changing keys
+// re-render the viewport content. None panic on a degenerate comparison.
+func (m Model) updateCompare(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		// Non-key messages (e.g. mouse wheel) drive the viewport scroll.
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
+	}
+	switch key.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "q":
+		m.state = listView
+		return m, nil
+	case "enter":
+		// Open the full prose report for the run currently being compared. The
+		// table cursor is unchanged while in compareView, so openDetail targets
+		// the same run.
+		return m.openDetail()
+	case "r":
+		if m.comparison != nil && len(m.comparison.RadarDefault.Series) >= 2 {
+			m.radarOn = !m.radarOn
+			m.viewport.SetContent(renderCompare(m))
+			m.viewport.GotoTop()
+		}
+		return m, nil
+	case "tab":
+		if m.comparison != nil {
+			if n := len(eligibleRivals(m.comparison)); n > 0 {
+				m.rivalIdx = (m.rivalIdx + 1) % n
+				m.viewport.SetContent(renderCompare(m))
+			}
+		}
+		return m, nil
+	case "1", "2", "3", "4":
+		m.sortCol = int(key.String()[0] - '0')
+		m.viewport.SetContent(renderCompare(m))
+		return m, nil
+	}
+	// Everything else scrolls the content (keeps bottom-sorted removed rows reachable).
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
@@ -196,17 +263,85 @@ func (m Model) openDetail() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openCompare loads the selected run's comparison sidecar and switches to
+// compareView. It always transitions (never blocks): a missing `compare` field in
+// the index (old store), an unreadable/invalid sidecar, or a sidecar whose id does
+// not match the selected run sets compareErr, which the view renders as a clear
+// message. Radar/sort/rival state is reset per open, with the rival defaulting to
+// the sidecar's radar_default second series.
+func (m Model) openCompare() (tea.Model, tea.Cmd) {
+	m.state = compareView
+	m.comparison = nil
+	m.compareErr = ""
+	m.radarOn = false
+	m.sortCol = 0
+	m.rivalIdx = 0
+
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.filtered) {
+		m.compareErr = "No entry selected."
+		return m, nil
+	}
+	entry := m.filtered[cursor]
+
+	if entry.Compare == nil {
+		m.compareErr = "no comparison — run `reindex` to generate"
+		return m, nil
+	}
+
+	c, err := store.LoadComparison(m.dir, *entry.Compare)
+	if err != nil {
+		m.compareErr = fmt.Sprintf("could not read comparison %q: %v", *entry.Compare, err)
+		return m, nil
+	}
+	// Bind the sidecar to the selected run: a stale or hand-edited index could point
+	// this entry at another run's (individually valid) sidecar, which would render B's
+	// data as A. The internal sidecar validation can't see this cross-file mismatch.
+	if c.ID != entry.ID {
+		m.compareErr = fmt.Sprintf("comparison %q is for run %q, not %q (stale or corrupt index)", *entry.Compare, c.ID, entry.ID)
+		return m, nil
+	}
+	m.comparison = c
+	m.rivalIdx = defaultRivalIdx(c)
+	// Render into the (scrollable) viewport so a run with more rows than the terminal
+	// height keeps its removed rows reachable rather than clipped off-screen.
+	m.viewport.SetContent(renderCompare(m))
+	m.viewport.GotoTop()
+	return m, nil
+}
+
+// defaultRivalIdx returns the index (within eligibleRivals) of the sidecar's
+// default radar rival — radar_default.series[1] — or 0 when absent.
+func defaultRivalIdx(c *store.Comparison) int {
+	if len(c.RadarDefault.Series) < 2 {
+		return 0
+	}
+	rivals := eligibleRivals(c)
+	for i, r := range rivals {
+		if r.Product == c.RadarDefault.Series[1] {
+			return i
+		}
+	}
+	return 0
+}
+
 // View implements tea.Model. It renders the component matching the current state.
 func (m Model) View() string {
 	switch m.state {
 	case detailView:
-		return m.viewport.View() + "\n" + helpStyle.Render("↑/↓ scroll · esc back · ctrl+c quit")
+		return m.viewport.View() + "\n" + helpStyle.Render("↑/↓ scroll · c compare · esc back · ctrl+c quit")
 	case filterView:
 		return m.filter.View() + "\n" + m.table.View() + "\n" +
 			helpStyle.Render("type to filter · enter/esc apply · ctrl+c quit")
+	case compareView:
+		if m.comparison == nil {
+			// Error / missing / mismatch — a short message; no scrolling needed.
+			return renderCompare(m) + "\n" + helpStyle.Render("q/esc back · ctrl+c quit")
+		}
+		return m.viewport.View() + "\n" + helpStyle.Render(compareHelp(m))
 	default: // listView
 		return m.table.View() + "\n" +
-			helpStyle.Render("↑/↓ move · enter detail · / filter · q quit")
+			helpStyle.Render("↑/↓ move · enter detail · c compare · / filter · q quit")
 	}
 }
 

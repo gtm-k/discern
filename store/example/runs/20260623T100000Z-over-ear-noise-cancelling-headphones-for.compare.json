@@ -1,0 +1,54 @@
+{
+  "id": "20260623T100000Z-over-ear-noise-cancelling-headphones-for",
+  "need": "Over-ear noise-cancelling headphones for travel and focus",
+  "axes": [
+    "fundamentals",
+    "consensus",
+    "evidence",
+    "clean"
+  ],
+  "dealbreaker_rules": [],
+  "counts": {
+    "considered": 2,
+    "eligible": 2,
+    "removed": 0
+  },
+  "radar_default": {
+    "series": [
+      "Sony WH-1000XM5",
+      "Bose QuietComfort Ultra"
+    ]
+  },
+  "items": [
+    {
+      "product": "Sony WH-1000XM5",
+      "maker": "Sony",
+      "status": "pick",
+      "disqualified_reason": null,
+      "dealbreaker_rule": null,
+      "durable_unresolved": false,
+      "scores": {
+        "fundamentals": 0.86,
+        "consensus_raw": 2,
+        "consensus_norm": 1,
+        "evidence": 0.7749999999999999,
+        "clean": 0.75
+      }
+    },
+    {
+      "product": "Bose QuietComfort Ultra",
+      "maker": "Bose",
+      "status": "runner_up",
+      "disqualified_reason": null,
+      "dealbreaker_rule": null,
+      "durable_unresolved": false,
+      "scores": {
+        "fundamentals": 0.82,
+        "consensus_raw": 1,
+        "consensus_norm": 0.5,
+        "evidence": 0.79,
+        "clean": 1
+      }
+    }
+  ]
+}

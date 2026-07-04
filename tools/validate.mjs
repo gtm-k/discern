@@ -161,6 +161,8 @@ if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, fou
 {
   const indexSchema = JSON.parse(readFileSync(join(root, "schemas/store-index.schema.json"), "utf8"));
   const validateIndex = ajv.compile(indexSchema);
+  const compareSchema = JSON.parse(readFileSync(join(root, "schemas/store-compare.schema.json"), "utf8"));
+  const validateCompare = ajv.compile(compareSchema);
 
   const exampleDir = join(root, "store/example");
   const exampleRuns = join(exampleDir, "runs");
@@ -172,7 +174,7 @@ if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, fou
     // Validate each run json against the rec schema
     const runFiles = existsSync(exampleRuns)
       ? readdirSync(exampleRuns, { withFileTypes: true })
-          .filter((d) => d.isFile() && d.name.endsWith(".json"))
+          .filter((d) => d.isFile() && d.name.endsWith(".json") && !d.name.endsWith(".compare.json"))
           .map((d) => join("store/example/runs", d.name))
       : [];
     checks++;
@@ -203,6 +205,31 @@ if (invalidFiles.length < 1) fail("coverage", `expected >=1 invalid fixture, fou
       }
       if (idx !== null && !validateIndex(idx))
         fail("store/example/index.json", `store-index schema: ${errs(validateIndex)}`);
+
+      // Each index entry's comparison sidecar must exist and validate against store-compare.schema
+      // (the seam artifact the Go viewer parses — a gate-enforced part of the tracked example).
+      if (Array.isArray(idx)) {
+        for (const entry of idx) {
+          checks++;
+          if (typeof entry?.compare !== "string") {
+            fail(`store/example/index.json (${entry?.id})`, `index entry is missing its "compare" sidecar path`);
+            continue;
+          }
+          const cmpPath = join(exampleDir, entry.compare);
+          if (!existsSync(cmpPath)) {
+            fail(`store/example/${entry.compare}`, "comparison sidecar missing — run node tools/seed-example.mjs");
+            continue;
+          }
+          let cmp;
+          try {
+            cmp = JSON.parse(readFileSync(cmpPath, "utf8"));
+          } catch (e) {
+            fail(`store/example/${entry.compare}`, `parse: ${e.message}`);
+            continue;
+          }
+          if (!validateCompare(cmp)) fail(`store/example/${entry.compare}`, `store-compare schema: ${errs(validateCompare)}`);
+        }
+      }
     }
   }
 }
