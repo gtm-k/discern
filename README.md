@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node: ESM](https://img.shields.io/badge/node-ESM-339933.svg?logo=node.js&logoColor=white)](package.json)
-[![Go: 1.24](https://img.shields.io/badge/go-1.24-00ADD8.svg?logo=go&logoColor=white)](viewer/go.mod)
+[![Go: 1.25](https://img.shields.io/badge/go-1.25-00ADD8.svg?logo=go&logoColor=white)](viewer/go.mod)
 [![Checks: passing](https://img.shields.io/badge/checks-passing-brightgreen.svg)](tools/test-logic.mjs)
 [![Status: research%20%26%20recommend](https://img.shields.io/badge/v1-research%20%26%20recommend-success.svg)](#status--roadmap)
 
