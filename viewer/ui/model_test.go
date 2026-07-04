@@ -87,6 +87,30 @@ func TestCompareMissingSidecar(t *testing.T) {
 	}
 }
 
+// TestCompareRejectsMismatchedSidecar: a stale/hand-edited index row whose id does
+// not match the (individually valid) sidecar it points at must be refused — the
+// viewer must not render run B's comparison as run A's. compareErr is set instead.
+func TestCompareRejectsMismatchedSidecar(t *testing.T) {
+	real, err := store.Load(exampleDir)
+	if err != nil || len(real) == 0 || real[0].Compare == nil {
+		t.Fatalf("example store not loadable with a sidecar: %v", err)
+	}
+	// An index row for run "WRONG-ID" pointing at another run's valid sidecar.
+	entry := store.Entry{ID: "WRONG-ID", Need: "n", Outcome: "RECOMMEND", MD: "runs/x.md", Compare: real[0].Compare}
+	m := New(exampleDir, []store.Entry{entry})
+	nm, _ := m.Update(runeKey('c'))
+	mm := nm.(Model)
+	if mm.state != compareView {
+		t.Fatal("`c` should still enter compareView")
+	}
+	if mm.comparison != nil {
+		t.Fatalf("mismatched sidecar must not be accepted, got %+v", mm.comparison)
+	}
+	if mm.compareErr == "" {
+		t.Fatal("want compareErr set for id mismatch, got empty")
+	}
+}
+
 // TestCompareTransitions exercises the compareView keys: sort, radar toggle, rival
 // cycle, and back-to-list — none should panic and each should mutate state.
 func TestCompareTransitions(t *testing.T) {

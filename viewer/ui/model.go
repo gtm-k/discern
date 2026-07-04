@@ -253,9 +253,10 @@ func (m Model) openDetail() (tea.Model, tea.Cmd) {
 
 // openCompare loads the selected run's comparison sidecar and switches to
 // compareView. It always transitions (never blocks): a missing `compare` field in
-// the index (old store) or an unreadable/invalid sidecar sets compareErr, which
-// the view renders as a clear message. Radar/sort/rival state is reset per open,
-// with the rival defaulting to the sidecar's radar_default second series.
+// the index (old store), an unreadable/invalid sidecar, or a sidecar whose id does
+// not match the selected run sets compareErr, which the view renders as a clear
+// message. Radar/sort/rival state is reset per open, with the rival defaulting to
+// the sidecar's radar_default second series.
 func (m Model) openCompare() (tea.Model, tea.Cmd) {
 	m.state = compareView
 	m.comparison = nil
@@ -279,6 +280,13 @@ func (m Model) openCompare() (tea.Model, tea.Cmd) {
 	c, err := store.LoadComparison(m.dir, *entry.Compare)
 	if err != nil {
 		m.compareErr = fmt.Sprintf("could not read comparison %q: %v", *entry.Compare, err)
+		return m, nil
+	}
+	// Bind the sidecar to the selected run: a stale or hand-edited index could point
+	// this entry at another run's (individually valid) sidecar, which would render B's
+	// data as A. The internal sidecar validation can't see this cross-file mismatch.
+	if c.ID != entry.ID {
+		m.compareErr = fmt.Sprintf("comparison %q is for run %q, not %q (stale or corrupt index)", *entry.Compare, c.ID, entry.ID)
 		return m, nil
 	}
 	m.comparison = c
