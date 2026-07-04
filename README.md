@@ -11,6 +11,8 @@
 [![Release: v0.2.0](https://img.shields.io/badge/release-v0.2.0-blue.svg)](#status--roadmap)
 [![Status: v2 · store + viewer](https://img.shields.io/badge/status-v2%20store%20%2B%20viewer-success.svg)](#status--roadmap)
 
+**🌐 [Live site — gtm-k.github.io/discern](https://gtm-k.github.io/discern/)**
+
 </div>
 
 ---
