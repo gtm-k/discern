@@ -83,11 +83,20 @@ type Scores struct {
 }
 
 // Load reads <dir>/index.json and returns all entries.
-// If the file does not exist, Load returns nil, nil (not an error).
+// A dir that exists without an index.json is a fresh, empty store (nil, nil);
+// a path that doesn't exist or isn't a directory is an error — a typo'd
+// --store path must not masquerade as an empty store.
 func Load(dir string) ([]Entry, error) {
 	b, err := os.ReadFile(filepath.Join(dir, "index.json"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			st, statErr := os.Stat(dir)
+			switch {
+			case statErr != nil:
+				return nil, errors.New("no such directory")
+			case !st.IsDir():
+				return nil, errors.New("not a directory")
+			}
 			return nil, nil
 		}
 		return nil, err

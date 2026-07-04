@@ -400,3 +400,36 @@ func TestReadReportRejectsSymlink(t *testing.T) {
 		t.Fatalf("safe in-store path: want %q+nil, got content=%q err=%v", "# ok", got, err)
 	}
 }
+
+// TestLoadMissingDirErrors: a nonexistent --store path must be an error, not an
+// empty store — a typo'd path would otherwise render as "No runs found" and be
+// indistinguishable from a genuinely fresh store.
+func TestLoadMissingDirErrors(t *testing.T) {
+	if _, err := Load(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
+		t.Fatalf("want error for nonexistent store dir, got nil")
+	}
+}
+
+// TestLoadStoreFileErrors: pointing --store at a regular file is an error, on
+// every platform (Windows maps file/child lookups to ErrNotExist, Linux to ENOTDIR).
+func TestLoadStoreFileErrors(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "store-as-file")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(f); err == nil {
+		t.Fatalf("want error when store path is a file, got nil")
+	}
+}
+
+// TestLoadEmptyDirIsEmptyStore: a dir that exists but has no index.json yet is a
+// fresh, empty store (nil, nil) — the friendly first-run path stays intact.
+func TestLoadEmptyDirIsEmptyStore(t *testing.T) {
+	es, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(es) != 0 {
+		t.Fatalf("want empty store, got %d entries", len(es))
+	}
+}
