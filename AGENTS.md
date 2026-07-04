@@ -2,8 +2,8 @@
 
 This file is the **runtime-neutral** entry point for Discern. Every AI coding agent that opens this repo —
 Claude Code, Cursor, Codex, Gemini CLI, OpenCode, Aider, Zed, and others — reads it automatically. The
-CLI-specific files (`CLAUDE.md`, `CODEX.md`, `GEMINI.md`, `OPENCODE.md`) are thin wrappers that import this
-one. **No runtime is privileged — Claude is just one of them.**
+CLI-specific files (`CLAUDE.md`, `CODEX.md`, `GEMINI.md`, `OPENCODE.md`, `QWEN.md`, `GROK.md`) are thin
+wrappers that import this one. **No runtime is privileged — Claude is just one of them.**
 
 ## What this repo is
 

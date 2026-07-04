@@ -215,8 +215,8 @@ See [`docs/store.md`](docs/store.md) for the layout, id scheme, and index contra
 
 | Path | What |
 |------|------|
-| `AGENTS.md` (+ `CLAUDE.md`·`CODEX.md`·`GEMINI.md`·`OPENCODE.md`) | AI-agnostic entry point — any agent reads these and triggers Discern on buying intent |
-| `skills/discern/SKILL.md` | The buying method — the portable skill (mirrored to `.claude/skills/`·`.agents/skills/` for native discovery) |
+| `AGENTS.md` (+ `CLAUDE.md`·`CODEX.md`·`GEMINI.md`·`OPENCODE.md`·`QWEN.md`·`GROK.md`) | AI-agnostic entry point — any agent reads these and triggers Discern on buying intent |
+| `skills/discern/SKILL.md` | The buying method — the portable skill (mirrored to `.claude/`·`.agents/`·`.qwen/`·`.grok/` `skills/` for native discovery) |
 | `schemas/` | Recommendation Object · Preference Profile · subagent-output · store-index JSON Schemas (the contracts) |
 | `docs/` | `triage`, `definitions`, `data-access`, `render`, `category-widening`, `live-smoke`, `store` — the normative specs |
 | `tools/` | Node ESM: `validate`, `cluster`, `grid`, `decision`, `render`, `compare`, `coverage`, `orchestration`, `category-gate`, `store` |
