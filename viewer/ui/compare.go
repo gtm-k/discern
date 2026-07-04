@@ -30,12 +30,14 @@ var (
 
 const (
 	statusW = 13 // width of the status column
-	axisW   = 11 // width of each of the four axis columns
+	axisW   = 13 // width of each of the four axis columns (fits the longest title, "Fundamentals")
 	barW    = 4  // block-bar cells per axis
 )
 
-// axisTitles are the human column headers, in sidecar axis order.
-var axisTitles = [4]string{"Fund", "Cons", "Evid", "Clean"}
+// axisTitles are the human column headers, in sidecar axis order. Spelled out in
+// full (not abbreviated) so the axis meaning is legible without a key; axisW is
+// sized to the widest ("Fundamentals").
+var axisTitles = [4]string{"Fundamentals", "Consensus", "Evidence", "Clean"}
 
 // renderCompare produces the compareView CONTENT (no help footer — View adds that).
 // It never panics: a missing sidecar, an absent pick, or fewer than two eligible
@@ -228,7 +230,7 @@ func renderRadarSection(m Model) string {
 
 	var b strings.Builder
 	b.WriteString(radarGrid(s0, s1, 24, 12) + "\n\n")
-	b.WriteString("axes: ↑Fund →Cons ↓Evid ←Clean\n")
+	b.WriteString("axes: ↑Fundamentals →Consensus ↓Evidence ←Clean\n")
 	b.WriteString("  ◆ " + s0.Label + "   ◇ " + s1.Label + "\n")
 
 	// Every removed item is listed beneath — cuts are never invisible.

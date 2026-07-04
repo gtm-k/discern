@@ -187,17 +187,17 @@ glance-reading, `◄ PICK` / `▲ runner-up` markers (marker + word, never color
 Over-ear noise-cancelling headphones for travel and focus
 2 considered · 2 eligible · 0 removed
 
-             product                          Fund       Cons       Evid       Clean
-◄ PICK       Sony WH-1000XM5 · Sony           .86  ███░  2    ████  .77  ███░  .75  ███░
-▲ runner-up  Bose QuietComfort Ultra · Bose   .82  ███░  1    ██░░  .79  ███░  1.00 ████
+             product                          Fundamentals Consensus    Evidence     Clean
+◄ PICK       Sony WH-1000XM5 · Sony           .86  ███░    2    ████    .77  ███░    .75  ███░
+▲ runner-up  Bose QuietComfort Ultra · Bose   .82  ███░    1    ██░░    .79  ███░    1.00 ████
 ```
 
 A dealbreaker doesn't merely filter — it **disqualifies structurally**, and the cut stays visible with its scores
 intact and the rule + reason shown, so nothing considered is hidden *(illustrative row — the bundled run has none)*:
 
 ```text
-             product                          Fund       Cons       Evid       Clean
-✗ REMOVED    Acme Studio 3 · Acme             .88  ████  3    ████  .80  ███░  .90  ████   [dealbreaker]
+             product                          Fundamentals Consensus    Evidence     Clean
+✗ REMOVED    Acme Studio 3 · Acme             .88  ████    3    ████    .80  ███░    .90  ████  [dealbreaker]
       ↳ rule: must support LDAC
       ↳ SBC/AAC only — no LDAC codec
 ```
