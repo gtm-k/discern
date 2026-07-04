@@ -254,13 +254,16 @@ export function renderReport(rec) {
     if (card?.summary) lines.push(safeStr(card.summary), "");
     const fundamentals = (Array.isArray(card?.fundamentals) ? card.fundamentals : []).filter(isRecord);
     if (fundamentals.length) {
-      lines.push("**Why it wins**");
+      // `###` sub-headings (block-level) rather than `**bold**` (inline): they read as distinct
+      // sections AND don't merge into the following paragraph the way inline bold does.
+      lines.push("### Why it wins", "");
       for (const f of fundamentals) lines.push(`- **${safeStr(f.dimension, "—")}** — ${safeStr(f.finding, "")}`);
       lines.push("");
     }
     if (rec.value_assessment?.summary)
-      lines.push(`**Value:** ${safeStr(rec.value_assessment.summary)}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${safeStr(rec.value_assessment.value_per_dollar)})` : ""}`, "");
-    if (rec.rationale) lines.push("**Full reasoning**", safeStr(rec.rationale), "");
+      lines.push("### Value",
+        `${safeStr(rec.value_assessment.summary)}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${safeStr(rec.value_assessment.value_per_dollar)})` : ""}`, "");
+    if (rec.rationale) lines.push("### Full reasoning", "", safeStr(rec.rationale), "");
   } else {
     lines.push("## No single pick");
     if (recommendFamily) {

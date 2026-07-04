@@ -258,11 +258,13 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   const scan = renderReport(scanRec);
   expect("render: pick shows fundamentals-card summary lead", scan.includes("A tidy one-line teardown summary."), `missing summary lead:\n${scan}`);
   expect("render: 'Why it wins' bullets from fundamentals[]",
-    scan.includes("**Why it wins**") && scan.includes("- **battery** — 60h class-leading") && scan.includes("- **comfort** — low clamp"),
+    scan.includes("### Why it wins") && scan.includes("- **battery** — 60h class-leading") && scan.includes("- **comfort** — low clamp"),
     `missing why-it-wins bullets:\n${scan}`);
   expect("render: best price in the at-a-glance header", /\*\*Best price:\*\* 220 USD \(verify at checkout\)/.test(scan), `missing best price:\n${scan}`);
+  expect("render: sub-sections are ### headings (block-level, not inline bold)",
+    scan.includes("### Value") && scan.includes("### Full reasoning"), `sub-sections not headings:\n${scan}`);
   expect("render: prose rationale demoted below the bullets",
-    scan.includes("**Full reasoning**") && scan.indexOf("**Why it wins**") < scan.indexOf("RATIONALE_PROSE_MARKER"),
+    scan.includes("### Full reasoning") && scan.indexOf("### Why it wins") < scan.indexOf("RATIONALE_PROSE_MARKER"),
     `rationale not demoted below the bullets:\n${scan}`);
   expect("render: dealbreakered item still appears in grid (visible)", dbReport.includes("DisqualifiedItem"),
     `dealbreakered item missing from grid entirely`);
