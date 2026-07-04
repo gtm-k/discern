@@ -221,10 +221,11 @@ See [`docs/store.md`](docs/store.md) for the layout, id scheme, and index contra
 | `docs/` | `triage`, `definitions`, `data-access`, `render`, `category-widening`, `live-smoke`, `store` — the normative specs |
 | `tools/` | Node ESM: `validate`, `cluster`, `grid`, `decision`, `render`, `compare`, `coverage`, `orchestration`, `category-gate`, `store` |
 | `agents/` | Capability-gated research subagents (harvester / teardown / sourcing) + their contract |
-| `profiles/` | `*.example.md` reference profiles (real profiles are git-ignored) |
+| `profiles/` | `*.example.md` reference profiles (real profiles git-ignored) + `MIGRATIONS.md` (profile schema-version log) |
 | `evals/` | Offline golden fixtures + deliberately-invalid cases that the gate must reject |
 | `store/example/` | A tracked seed run so the viewer works out of the box |
 | `viewer/` | The Go TUI viewer (own module; single-binary build) |
+| `site/` | The static landing page (self-contained; deployed to the `gh-pages` branch) |
 
 ## Develop
 
