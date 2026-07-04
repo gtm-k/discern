@@ -8,7 +8,8 @@
 [![Node: ESM](https://img.shields.io/badge/node-ESM-339933.svg?logo=node.js&logoColor=white)](package.json)
 [![Go: 1.25](https://img.shields.io/badge/go-1.25-00ADD8.svg?logo=go&logoColor=white)](viewer/go.mod)
 [![Checks: passing](https://img.shields.io/badge/checks-passing-brightgreen.svg)](tools/test-logic.mjs)
-[![Status: research%20%26%20recommend](https://img.shields.io/badge/v1-research%20%26%20recommend-success.svg)](#status--roadmap)
+[![Release: v0.2.0](https://img.shields.io/badge/release-v0.2.0-blue.svg)](#status--roadmap)
+[![Status: v2 · store + viewer](https://img.shields.io/badge/status-v2%20store%20%2B%20viewer-success.svg)](#status--roadmap)
 
 </div>
 
@@ -42,6 +43,41 @@ flowchart LR
   S --> V["Go TUI viewer"]
 ```
 
+## Architecture
+
+One **portable Node core** runs the whole method and emits the schema-validated **Recommendation Object** — the
+stable contract every later stage consumes. Optional **capability tiers** only *widen* breadth: the run completes on
+the baseline tier alone (the *portable-core guarantee*), and any tier it can't positively confirm is treated as absent
+(fail-closed). A separate **Go TUI viewer** only *displays* what the core already rendered — no decision logic is
+duplicated across the two-toolchain seam.
+
+```mermaid
+flowchart TB
+  subgraph tiers["Capability tiers · gated boosters, fail-closed"]
+    direction LR
+    T0["baseline<br/>web search + fetch"]
+    T1["subagents"]:::opt
+    T2["browser"]:::opt
+    T3["retailer API"]:::opt
+  end
+
+  subgraph core["Portable Node core · completes on baseline alone"]
+    direction LR
+    H["harvest"] --> CL["cluster<br/>independence"] --> GR["grid<br/>fundamentals"] --> DC["decide<br/>value → price gate"] --> CP["compare<br/>4 axes"]
+  end
+
+  tiers -. "widen breadth, never a crutch" .-> H
+  core ==> RO{{"Recommendation Object<br/>schema-validated contract"}}
+  RO ==> ST[("Durable store<br/>json · md · compare · index")]
+  ST ==> V["Go TUI viewer<br/>lists · reads md · plots sidecar"]
+  RO -. "next phases" .-> P2["checkout-prep · agentic purchase"]
+
+  classDef opt stroke-dasharray:4 3;
+  class T1,T2,T3 opt;
+  classDef future stroke-dasharray:2 2,color:#868e96;
+  class P2 future;
+```
+
 ## Why it's different
 
 Most shopping tools rank by price or star rating and have no taste. Discern encodes a real method:
@@ -59,6 +95,17 @@ Most shopping tools rank by price or star rating and have no taste. Discern enco
 - **You + a gift switch.** A persistent preference profile, with a beneficiary switch (self vs. recipient) that
   swaps the active filters and value framework.
 
+### How that compares
+
+|  | Affiliate listicles | Marketplace star-sort | Generic LLM answer | **Discern** |
+|---|---|---|---|---|
+| **Ranks by** | commission / SEO | count of ratings | plausible recall | fundamentals, then independent recurrence |
+| **Duplicate sources** | counted many times | — | blended silently | collapsed to **one** signal |
+| **Dealbreakers** | ignored | filtered, then forgotten | soft-honored | structurally **disqualified** — can't win on merit |
+| **Price** | often the whole point | a sort knob | ad hoc | value-per-dollar gate, applied **last** |
+| **"Not enough evidence"** | never | never | rarely | a first-class outcome |
+| **Shows its work** | no | partial | no | provenance · confidence · counterevidence · failed-source log |
+
 ## Quickstart
 
 ```bash
@@ -74,7 +121,8 @@ cd viewer && go build -o discern-view . && cd ..
 # 3) See it immediately on the bundled example run
 viewer/discern-view --store store/example  # ↑/↓ navigate · Enter open · c compare · / filter · q quit
 
-# 4) Run a real recommendation: open your AI runtime in this repo and point it at the skill —
+# 4) Run a real recommendation — the engine is an agent *skill*, not a CLI binary. Open this repo in your
+#    AI coding agent (e.g. Claude Code) and prompt it:
 #    "Follow skills/discern/SKILL.md to recommend <need> for me (profiles/self.md)."
 ```
 
@@ -130,6 +178,28 @@ Every completed run can be persisted and browsed locally.
   considered is invisible. The Node writer computes it (`tools/compare.mjs`) into a validated `runs/<id>.compare.json`
   sidecar; Go only plots.
 
+The compare view (`c`) over the bundled example run — every considered item on four derived axes, block-bars for
+glance-reading, `◄ PICK` / `▲ runner-up` markers (marker + word, never color alone):
+
+```text
+Over-ear noise-cancelling headphones for travel and focus
+2 considered · 2 eligible · 0 removed
+
+             product                          Fund       Cons       Evid       Clean
+◄ PICK       Sony WH-1000XM5 · Sony           .86  ███░  2    ████  .77  ███░  .75  ███░
+▲ runner-up  Bose QuietComfort Ultra · Bose   .82  ███░  1    ██░░  .79  ███░  1.00 ████
+```
+
+A dealbreaker doesn't merely filter — it **disqualifies structurally**, and the cut stays visible with its scores
+intact and the rule + reason shown, so nothing considered is hidden *(illustrative row — the bundled run has none)*:
+
+```text
+             product                          Fund       Cons       Evid       Clean
+✗ REMOVED    Acme Studio 3 · Acme             .88  ████  3    ████  .80  ███░  .90  ████   [dealbreaker]
+      ↳ rule: must support LDAC
+      ↳ SBC/AAC only — no LDAC codec
+```
+
 ```bash
 node tools/store.mjs record <rec.json>     # archive a run   ·   reindex rebuilds the index
 viewer/discern-view --store store          # browse the live store
@@ -144,7 +214,7 @@ See [`docs/store.md`](docs/store.md) for the layout, id scheme, and index contra
 | `skills/discern/SKILL.md` | The buying method — the portable skill |
 | `schemas/` | Recommendation Object · Preference Profile · subagent-output · store-index JSON Schemas (the contracts) |
 | `docs/` | `triage`, `definitions`, `data-access`, `render`, `category-widening`, `live-smoke`, `store` — the normative specs |
-| `tools/` | Node ESM: `validate`, `cluster`, `grid`, `decision`, `render`, `coverage`, `orchestration`, `category-gate`, `store` |
+| `tools/` | Node ESM: `validate`, `cluster`, `grid`, `decision`, `render`, `compare`, `coverage`, `orchestration`, `category-gate`, `store` |
 | `agents/` | Capability-gated research subagents (harvester / teardown / sourcing) + their contract |
 | `profiles/` | `*.example.md` reference profiles (real profiles are git-ignored) |
 | `evals/` | Offline golden fixtures + deliberately-invalid cases that the gate must reject |
@@ -162,11 +232,22 @@ cd viewer && go vet ./... && go test ./... && go build ./...   # Go: store parse
 
 ## Status & roadmap
 
+> **Versioning:** semver stays pre-1.0 (`0.x`) until purchasing ships. The `v1` / `v2` milestones below are
+> *feature* milestones, not release tags — `v0.2.0` is the current release.
+
 - ✅ **v1 — research & recommend.** The full 8-step method, the Recommendation Object contract, independence
   clustering, the teardown decision engine, value/preference + gift switch, sourcing & rendering, and
   capability-gated orchestration. *No purchasing.*
 - ✅ **v2 — durable store + Go TUI viewer + multi-angle harvest coverage.**
 - 🔜 **Phase 2 — checkout-prep** and **Phase 3 — agentic purchase**, both consuming the same Recommendation Object.
+
+## Contributing
+
+Issues and PRs welcome. Two rules keep the two-toolchain seam honest:
+
+1. **Both gates green before a PR** — `npm test` and `cd viewer && go vet ./... && go test ./... && go build ./...`.
+2. **Branch as `feat/<desc>` or `fix/<desc>`**, and keep decision logic single-sourced in the Node core — the Go
+   viewer only *displays*, it never re-derives a score or a disqualification.
 
 ## License
 

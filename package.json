@@ -1,6 +1,6 @@
 {
   "name": "discern",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Discern — a cross-platform agentic-commerce skill that finds the genuinely-best product for a given person, modeled on a disciplined human buying method.",
   "type": "module",
