@@ -1,0 +1,46 @@
+name: CI
+
+# Both toolchain gates, mirroring the local "Develop" commands in the README.
+#
+# While the repo is private and under active development, CI runs on manual
+# dispatch only, to conserve free-tier Actions minutes. BEFORE the public
+# launch, uncomment the push / pull_request triggers below so every change and
+# every contributor PR is checked automatically.
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [ master ]
+  # pull_request:
+  #   branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Node gate · schemas + logic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  go:
+    name: Go gate · vet + test + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: viewer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: viewer/go.mod
+          cache-dependency-path: viewer/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./...

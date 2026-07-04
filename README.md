@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node: ESM](https://img.shields.io/badge/node-ESM-339933.svg?logo=node.js&logoColor=white)](package.json)
 [![Go: 1.25](https://img.shields.io/badge/go-1.25-00ADD8.svg?logo=go&logoColor=white)](viewer/go.mod)
-[![Checks: passing](https://img.shields.io/badge/checks-passing-brightgreen.svg)](tools/test-logic.mjs)
+[![CI](https://github.com/gtm-k/discern/actions/workflows/ci.yml/badge.svg)](https://github.com/gtm-k/discern/actions/workflows/ci.yml)
 [![Release: v0.2.0](https://img.shields.io/badge/release-v0.2.0-blue.svg)](#status--roadmap)
 [![Status: v2 · store + viewer](https://img.shields.io/badge/status-v2%20store%20%2B%20viewer-success.svg)](#status--roadmap)
 
@@ -248,6 +248,8 @@ Issues and PRs welcome. Two rules keep the two-toolchain seam honest:
 1. **Both gates green before a PR** — `npm test` and `cd viewer && go vet ./... && go test ./... && go build ./...`.
 2. **Branch as `feat/<desc>` or `fix/<desc>`**, and keep decision logic single-sourced in the Node core — the Go
    viewer only *displays*, it never re-derives a score or a disqualification.
+
+Found a security issue? Please don't open a public issue — see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
