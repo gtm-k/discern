@@ -66,6 +66,9 @@ export function rebuildIndex({ storeDir = "store", makeComparison = buildCompari
   // Collect the sidecar writes but DON'T flush them until every run + comparison + the whole index
   // validates — the same validate-all-before-mutate discipline recordRun uses (no partial back-fill).
   const sidecars = [];
+  // Re-render the .md report too, so a render.mjs change propagates on `reindex`: the .md, the
+  // .compare.json and the index are ALL derived from the source .json and are recomputed together.
+  const reports = [];
   const idx = files.map(f => {
     // A syntactically broken run (truncated/corrupt) throws a bare parse error
     // WITHOUT the filename — wrap it so the operator can find the offending file.
@@ -81,11 +84,13 @@ export function rebuildIndex({ storeDir = "store", makeComparison = buildCompari
     const comparison = makeComparison(rec); comparison.id = id;
     if (!validateCompare(comparison)) throw new Error(`store: refusing to index run ${f}: invalid comparison: ${(validateCompare.errors||[]).map(e=>e.instancePath+" "+e.message).join("; ")}`);
     sidecars.push([join(runs, id+".compare.json"), JSON.stringify(comparison,null,2)+"\n"]);
+    reports.push([join(runs, id+".md"), renderReport(rec)+"\n"]); // renderReport never throws (guarded)
     return entryOf(rec, id);
   });
   if (!validateIndex(idx)) throw new Error("store: rebuilt index invalid");
   mkdirSync(storeDir,{recursive:true}); // ensure a missing/custom store dir yields a valid empty index, not ENOENT
   for (const [p,c] of sidecars) writeFileSync(p, c);
+  for (const [p,c] of reports) writeFileSync(p, c);
   writeFileSync(join(storeDir,"index.json"), JSON.stringify(idx,null,2)+"\n");
   return { count: idx.length };
 }

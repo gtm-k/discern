@@ -93,6 +93,30 @@ export function offerViolations(rec) {
 const conf = (x) => `${confidenceBand(x)} (${typeof x === "number" ? x.toFixed(2) : "n/a"})`;
 const orNone = (arr) => (Array.isArray(arr) && arr.length ? arr.map((x) => safeStr(x)).join(", ") : "none");
 
+/** The shortlist item matching a product — the pick joins to its fundamentals card by product name. */
+function shortlistFor(rec, product) {
+  return (Array.isArray(rec.shortlist) ? rec.shortlist : [])
+    .filter(isRecord)
+    .find((s) => s.product === product) ?? null;
+}
+
+/**
+ * A compact "Best price" bit for the at-a-glance header: the lowest-priced offer, with the
+ * verify-at-checkout caveat when the price is scraped. Empty for non-recommend outcomes or when
+ * no offer carries a finite price (the Offers section still shows the full sourcing picture).
+ */
+function bestPriceBit(rec, recommendFamily) {
+  if (!recommendFamily) return "";
+  const priced = (Array.isArray(rec.offers) ? rec.offers : [])
+    .filter((o) => isRecord(o) && Number.isFinite(o.price))
+    .sort((a, b) => a.price - b.price);
+  const o = priced[0];
+  if (!o) return "";
+  const cur = o.currency ? ` ${safeStr(o.currency, "")}` : "";
+  const verify = o.verify_at_checkout === true || isScrapedTier(o.provenance_tier) ? " (verify at checkout)" : "";
+  return `**Best price:** ${o.price}${cur}${verify}`;
+}
+
 function renderBudget(req) {
   const b = req?.budget;
   const bits = [];
@@ -206,6 +230,8 @@ export function renderReport(rec) {
   const head = [`**Outcome:** ${safeStr(rec.outcome, "(missing outcome)")}`];
   if (rec.reason_code && rec.reason_code !== "NONE") head.push(`**Reason:** ${safeStr(rec.reason_code)}`);
   head.push(`**Overall confidence:** ${conf(rec.confidence_overall)}`);
+  const price = bestPriceBit(rec, recommendFamily); // at-a-glance: the answer + its price in one line
+  if (price) head.push(price);
   lines.push(head.join("  ·  "), "");
 
   if (rec.framed_requirements?.need) {
@@ -219,10 +245,22 @@ export function renderReport(rec) {
   // never under INSUFFICIENT_EVIDENCE, and never a stray/garbled pick rendered as "## Pick — undefined".
   if (recommendFamily && isRecord(rec.pick) && rec.pick.product) {
     lines.push(`## Pick — ${safeStr(rec.pick.product)}${rec.pick.maker ? ` by ${safeStr(rec.pick.maker)}` : ""}`);
-    if (rec.rationale) lines.push(safeStr(rec.rationale));
+    // Scannable-first (docs/render.md §3): lead with the pick's fundamentals-card summary, then the
+    // structured teardown as "Why it wins" bullets (dimension → finding — the data the method already
+    // produced but the report used to discard), then value, and ONLY then the full prose rationale,
+    // demoted under "Full reasoning" so the reader grasps the bullets before the paragraph.
+    const card = isRecord(shortlistFor(rec, rec.pick.product)?.fundamentals_card)
+      ? shortlistFor(rec, rec.pick.product).fundamentals_card : null;
+    if (card?.summary) lines.push(safeStr(card.summary), "");
+    const fundamentals = (Array.isArray(card?.fundamentals) ? card.fundamentals : []).filter(isRecord);
+    if (fundamentals.length) {
+      lines.push("**Why it wins**");
+      for (const f of fundamentals) lines.push(`- **${safeStr(f.dimension, "—")}** — ${safeStr(f.finding, "")}`);
+      lines.push("");
+    }
     if (rec.value_assessment?.summary)
-      lines.push(`**Value:** ${safeStr(rec.value_assessment.summary)}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${safeStr(rec.value_assessment.value_per_dollar)})` : ""}`);
-    lines.push("");
+      lines.push(`**Value:** ${safeStr(rec.value_assessment.summary)}${rec.value_assessment.value_per_dollar ? ` (value-per-dollar: ${safeStr(rec.value_assessment.value_per_dollar)})` : ""}`, "");
+    if (rec.rationale) lines.push("**Full reasoning**", safeStr(rec.rationale), "");
   } else {
     lines.push("## No single pick");
     if (recommendFamily) {

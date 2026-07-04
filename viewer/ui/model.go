@@ -262,14 +262,32 @@ func (m Model) openDetail() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	out, rerr := glamour.Render(raw, "auto")
-	if rerr != nil {
-		// Fall back to the raw (already pre-rendered) markdown if ANSI styling fails.
-		out = raw
-	}
-	m.viewport.SetContent(out)
+	m.viewport.SetContent(renderMarkdown(raw, m.width))
 	m.viewport.GotoTop()
 	return m, nil
+}
+
+// renderMarkdown applies glamour's theme-aware ANSI styling to the pre-rendered report
+// markdown (display-only — no report content is authored here, preserving render.mjs as the
+// single renderer), word-wrapped to the terminal width so long lines read naturally instead
+// of glamour's default 80-column wrap. Falls back to the raw markdown if styling fails.
+func renderMarkdown(raw string, width int) string {
+	w := width - 2 // small right margin
+	if w < 40 {
+		w = 80
+	}
+	if w > 120 {
+		w = 120
+	}
+	r, err := glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(w))
+	if err != nil {
+		return raw
+	}
+	out, err := r.Render(raw)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // openCompare loads the selected run's comparison sidecar and switches to

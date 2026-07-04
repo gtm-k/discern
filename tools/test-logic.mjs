@@ -238,6 +238,32 @@ const expect = (name, cond, detail) => { checks++; if (!cond) failures.push(`${n
   const dbReport = renderReport(dealbreakerRec);
   expect("render: dealbreaker grid marker present", dbReport.includes("DISQUALIFIED — dealbreaker"),
     `grid missing "DISQUALIFIED — dealbreaker" marker:\n${dbReport}`);
+
+  // Scannable Pick (docs/render.md §3): fundamentals-card summary as a lead, "Why it wins" bullets from
+  // fundamentals[], best price in the at-a-glance header, and the prose rationale demoted BELOW the bullets.
+  const scanRec = {
+    outcome: "RECOMMEND", reason_code: "NONE", confidence_overall: 0.8,
+    framed_requirements: { need: "widget" },
+    pick: { product: "PickW", maker: "M1" },
+    candidates: [{ product: "PickW", maker: "M1", durable_ids: { model_no: "P1" },
+      evidence: [{ claim: "c", source_cluster_id: "a", provenance: { url: "https://e/1", owner: "O", access_tier: "fetch", source_class: "professional_review" }, independence_flag: true, affiliate_or_sponsored_flag: false, claim_confidence: 0.8 }],
+      recurrence_over_clusters: 2 }],
+    shortlist: [{ product: "PickW", fundamentals_card: { summary: "A tidy one-line teardown summary.", fundamentals_score: 0.8,
+      fundamentals: [{ dimension: "battery", finding: "60h class-leading" }, { dimension: "comfort", finding: "low clamp" }] }, counterevidence: [] }],
+    rationale: "RATIONALE_PROSE_MARKER — the long paragraph that used to lead the section.",
+    value_assessment: { summary: "good value", value_per_dollar: "high" },
+    offers: [{ merchant: "Shop", price: 220, currency: "USD", provenance_tier: "fetch", timestamp: "2026-07-03", offer_confidence: 0.6, verify_at_checkout: true }],
+    search_universe: { queries_run: ["q"], sources_hit: [], sources_failed_or_blocked: [], tiers_unavailable: [], budgets_hit: [], fetches_used: 1, angles_swept: ["roundup"] },
+  };
+  const scan = renderReport(scanRec);
+  expect("render: pick shows fundamentals-card summary lead", scan.includes("A tidy one-line teardown summary."), `missing summary lead:\n${scan}`);
+  expect("render: 'Why it wins' bullets from fundamentals[]",
+    scan.includes("**Why it wins**") && scan.includes("- **battery** — 60h class-leading") && scan.includes("- **comfort** — low clamp"),
+    `missing why-it-wins bullets:\n${scan}`);
+  expect("render: best price in the at-a-glance header", /\*\*Best price:\*\* 220 USD \(verify at checkout\)/.test(scan), `missing best price:\n${scan}`);
+  expect("render: prose rationale demoted below the bullets",
+    scan.includes("**Full reasoning**") && scan.indexOf("**Why it wins**") < scan.indexOf("RATIONALE_PROSE_MARKER"),
+    `rationale not demoted below the bullets:\n${scan}`);
   expect("render: dealbreakered item still appears in grid (visible)", dbReport.includes("DisqualifiedItem"),
     `dealbreakered item missing from grid entirely`);
 }
@@ -1261,6 +1287,10 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
     const d2idx = JSON.parse(readFileSync(join(d2,"index.json"),"utf8"));
     expect("store/compare: reindex index entry has the compare path", d2idx[0].compare === `runs/${rid}.compare.json`,
       `compare=${d2idx[0].compare}`);
+    // reindex also (re)renders the .md from source, so a render.mjs change propagates on reindex.
+    const d2md = join(d2,"runs",rid+".md");
+    expect("store: rebuildIndex (re)renders the .md report", existsSync(d2md), `missing ${d2md}`);
+    expect("store: reindexed .md matches renderReport(rec)", readFileSync(d2md,"utf8") === renderReport(rec)+"\n", `reindexed .md drifted from renderReport`);
     rmSync(d2,{recursive:true,force:true});
   }
 

@@ -110,8 +110,9 @@ reason `detail`, so a hard filter reads as "removed by rule, regardless of merit
 legend and an `N considered · M eligible · K removed` completeness line are always shown. `status` is one of
 `pick | runner_up | eligible | not_shortlisted | disqualified`.
 
-`reindex` back-fills sidecars for existing runs, so runs recorded before the sidecar existed gain a
-comparison with no agent re-run.
+`reindex` recomputes **all derived artifacts from the source `.json`** — the `.md` report, the
+`.compare.json` sidecar, and `index.json` — so a `render.mjs` or `compare.mjs` change propagates to existing
+runs (and pre-sidecar runs gain a comparison) with no agent re-run.
 
 ## Privacy / gitignore
 

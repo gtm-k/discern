@@ -7,11 +7,20 @@ computed but never rendered is, for the user, a silent failure.
 
 ## Sections (in order)
 
-1. **Header** — `outcome`; `reason_code` when it is not `NONE`; `confidence_overall` as a band + value.
+1. **Header (at-a-glance)** — `outcome`; `reason_code` when it is not `NONE`; `confidence_overall` as a
+   band + value; and, for a recommend-family outcome, **Best price** — the lowest-priced offer with the
+   verify-at-checkout caveat when scraped — so the answer, its confidence, and its price read in one line.
 2. **Need** — `framed_requirements.need`, plus budget and region when present.
-3. **Pick** — `pick.product` by `maker`, the `rationale`, and the `value_assessment` (value-per-dollar).
+3. **Pick (scannable-first)** — `pick.product` by `maker`, then, in order:
+   - the pick's **`fundamentals_card.summary`** as a one-line lead (the method's own TL;DR);
+   - **"Why it wins"** — a bullet per `fundamentals_card.fundamentals[]` entry (`**dimension** — finding`),
+     surfacing the structured teardown the method produces (previously computed but never rendered);
+   - **Value** — `value_assessment.summary` + value-per-dollar, on one line;
+   - **"Full reasoning"** — the free-text `rationale`, **demoted below** the bullets so the reader grasps
+     the structured summary first and reads the paragraph only on demand.
    When there is no pick (a genuine tie, or `INSUFFICIENT_EVIDENCE`), this becomes a **"No single pick"**
-   note — the renderer never fabricates a pick the object does not contain.
+   note — the renderer never fabricates a pick the object does not contain. Every leaf is `safeStr`-guarded,
+   so a malformed `fundamentals_card`/`rationale`/`summary` degrades to a visible gap, never a raw leak.
 4. **The grid** — candidates ranked by **fundamentals, then independent recurrence** (invariant R1, via
    `decision.mjs::rankingModel` + `grid.mjs::rankCandidates` — one source of truth, not re-implemented).
    Each row shows `fundamentals_score`, `recurrence_over_clusters`, a `RECALLED` flag where it applies,
