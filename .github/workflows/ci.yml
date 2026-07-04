@@ -1,17 +1,14 @@
 name: CI
 
 # Both toolchain gates, mirroring the local "Develop" commands in the README.
-#
-# While the repo is private and under active development, CI runs on manual
-# dispatch only, to conserve free-tier Actions minutes. BEFORE the public
-# launch, uncomment the push / pull_request triggers below so every change and
-# every contributor PR is checked automatically.
+# Every push to master and every contributor PR is checked automatically;
+# workflow_dispatch stays available for manual re-runs.
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [ master ]
-  # pull_request:
-  #   branches: [ master ]
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: read

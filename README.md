@@ -117,9 +117,10 @@ npm test                                   # validates schemas + all golden/eval
 
 # 2) Build the viewer (Go)
 cd viewer && go build -o discern-view . && cd ..
+#    (Windows PowerShell/cmd: use `-o discern-view.exe` — extensionless binaries run only from bash-like shells)
 
 # 3) See it immediately on the bundled example run
-viewer/discern-view --store store/example  # ↑/↓ navigate · Enter open · c compare · / filter · q quit
+viewer/discern-view --store store/example  # ↑/↓ navigate · Enter compare grid (Enter again: report) · / filter · q quit
 
 # 4) Run a real recommendation — the engine is an agent *skill*, not a CLI binary. Open this repo in your
 #    AI coding agent (e.g. Claude Code) and prompt it:
@@ -172,7 +173,8 @@ Every completed run can be persisted and browsed locally.
 - **Viewer** (`viewer/`, Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea)) — a single binary that
   lists, filters, and reads runs. It only *displays* the pre-rendered Markdown (no rendering logic is duplicated in
   Go), and treats a shared/hand-edited store as untrusted (rejects path-escaping report references).
-- **Comparison view** (`c` on any run) — a scannable heatmap tableau over the *full considered set* on four derived
+- **Comparison view** (`Enter` or `c` on any run — it opens first; the prose report is `Enter` again from the
+  grid) — a scannable heatmap tableau over the *full considered set* on four derived
   axes (fundamentals · consensus · evidence · clean), with an optional pick-vs-rival radar (`r`). Every item removed by
   a dealbreaker stays visible — struck-through with its scores intact and the rule + reason shown — so nothing
   considered is invisible. The Node writer computes it (`tools/compare.mjs`) into a validated `runs/<id>.compare.json`
