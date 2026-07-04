@@ -228,6 +228,44 @@ func TestLoadComparisonRejectsInvalid(t *testing.T) {
 	}
 }
 
+// TestLoadComparisonRejectsBadRadar verifies the radar/identity invariants a hand-edited
+// store could break even with a schema-shaped sidecar: a removed (dealbreaker) item must
+// never be a plotted series, series[0] must be the pick, and item product keys are unique.
+func TestLoadComparisonRejectsBadRadar(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, "runs")
+	if err := os.MkdirAll(runs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) string {
+		if err := os.WriteFile(filepath.Join(runs, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return filepath.Join("runs", name)
+	}
+	pick := `{"product":"P","maker":"M","status":"pick","disqualified_reason":null,"dealbreaker_rule":null,"durable_unresolved":false,"scores":{"fundamentals":0.8,"consensus_raw":2,"consensus_norm":1,"evidence":0.6,"clean":1}}`
+	disq := `{"product":"X","maker":"M","status":"disqualified","disqualified_reason":"bad","dealbreaker_rule":"r","durable_unresolved":false,"scores":{"fundamentals":0.4,"consensus_raw":1,"consensus_norm":null,"evidence":0.5,"clean":null}}`
+	runner := `{"product":"R","maker":"M","status":"runner_up","disqualified_reason":null,"dealbreaker_rule":null,"durable_unresolved":false,"scores":{"fundamentals":0.7,"consensus_raw":1,"consensus_norm":0.5,"evidence":0.6,"clean":1}}`
+	dupP := `{"product":"P","maker":"N","status":"eligible","disqualified_reason":null,"dealbreaker_rule":null,"durable_unresolved":false,"scores":{"fundamentals":0.6,"consensus_raw":1,"consensus_norm":0.5,"evidence":0.5,"clean":1}}`
+	doc := func(counts, series, items string) string {
+		return `{"id":"x","need":"n","axes":["fundamentals","consensus","evidence","clean"],` +
+			`"dealbreaker_rules":["r"],"counts":` + counts + `,"radar_default":{"series":` + series + `},"items":[` + items + `]}`
+	}
+
+	cases := map[string]string{
+		"disqualified in radar":  doc(`{"considered":2,"eligible":1,"removed":1}`, `["X"]`, pick+","+disq),
+		"non-pick radar lead":    doc(`{"considered":2,"eligible":2,"removed":0}`, `["R","P"]`, runner+","+pick),
+		"duplicate item product": doc(`{"considered":2,"eligible":2,"removed":0}`, `[]`, pick+","+dupP),
+	}
+	i := 0
+	for name, body := range cases {
+		i++
+		if got, err := LoadComparison(dir, write(fmt.Sprintf("r%d.compare.json", i), body)); err == nil || got != nil {
+			t.Fatalf("%s: want error+nil comparison, got %v err=%v", name, got, err)
+		}
+	}
+}
+
 func TestLoadExample(t *testing.T) {
 	es, err := Load(filepath.Join("..", "..", "store", "example"))
 	if err != nil {

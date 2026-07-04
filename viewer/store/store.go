@@ -232,19 +232,29 @@ func (c *Comparison) validate() error {
 			return fmt.Errorf("axes[%d]: want %q, got %q", i, a, c.Axes[i])
 		}
 	}
-	products := make(map[string]bool, len(c.Items))
-	removed := 0
-	for i, it := range c.Items {
+	byProduct := make(map[string]*CompareItem, len(c.Items))
+	removed, pickCount := 0, 0
+	for i := range c.Items {
+		it := &c.Items[i]
 		if it.Product == "" {
 			return fmt.Errorf("items[%d]: empty product", i)
 		}
 		if !validStatus[it.Status] {
 			return fmt.Errorf("items[%d] %q: invalid status %q", i, it.Product, it.Status)
 		}
-		if it.Status == "disqualified" {
-			removed++
+		if _, dup := byProduct[it.Product]; dup {
+			return fmt.Errorf("items: duplicate product %q", it.Product)
 		}
-		products[it.Product] = true
+		byProduct[it.Product] = it
+		switch it.Status {
+		case "disqualified":
+			removed++
+		case "pick":
+			pickCount++
+		}
+	}
+	if pickCount > 1 {
+		return fmt.Errorf("items: %d picks, want at most 1", pickCount)
 	}
 	if c.Counts.Considered != len(c.Items) {
 		return fmt.Errorf("counts.considered=%d but %d items", c.Counts.Considered, len(c.Items))
@@ -256,12 +266,25 @@ func (c *Comparison) validate() error {
 		return fmt.Errorf("counts not additive: considered=%d eligible=%d removed=%d",
 			c.Counts.Considered, c.Counts.Eligible, c.Counts.Removed)
 	}
+	// Radar overlays at most two series. A removed (dealbreaker) item is NEVER plotted —
+	// the fail-closed dealbreaker contract must hold in the radar too — series[0] is the
+	// pick, and every plotted series must carry a fundamentals score to draw.
 	if len(c.RadarDefault.Series) > 2 {
 		return fmt.Errorf("radar_default.series: at most 2, got %d", len(c.RadarDefault.Series))
 	}
-	for _, s := range c.RadarDefault.Series {
-		if !products[s] {
+	for j, s := range c.RadarDefault.Series {
+		it, ok := byProduct[s]
+		if !ok {
 			return fmt.Errorf("radar_default.series references unknown product %q", s)
+		}
+		if it.Status == "disqualified" {
+			return fmt.Errorf("radar_default.series[%d] %q is disqualified — removed items are never plotted", j, s)
+		}
+		if it.Scores.Fundamentals == nil {
+			return fmt.Errorf("radar_default.series[%d] %q has no fundamentals score to plot", j, s)
+		}
+		if j == 0 && it.Status != "pick" {
+			return fmt.Errorf("radar_default.series[0] %q must be the pick (status %q)", s, it.Status)
 		}
 	}
 	return nil
