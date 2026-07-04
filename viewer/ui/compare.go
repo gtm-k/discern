@@ -37,16 +37,18 @@ const (
 // axisTitles are the human column headers, in sidecar axis order.
 var axisTitles = [4]string{"Fund", "Cons", "Evid", "Clean"}
 
-// renderCompare is the compareView renderer. It never panics: a missing sidecar,
-// an absent pick, or fewer than two eligible series each degrade to a clear
-// message or a tableau-only view.
+// renderCompare produces the compareView CONTENT (no help footer — View adds that).
+// It never panics: a missing sidecar, an absent pick, or fewer than two eligible
+// series each degrade to a clear message or a tableau-only view. The content is
+// rendered into a scrollable viewport, so a run with more rows than the terminal
+// height keeps its removed rows reachable rather than clipping them off-screen.
 func renderCompare(m Model) string {
 	if m.compareErr != "" {
-		return m.compareErr + "\n\n" + helpStyle.Render("q/esc back · ctrl+c quit")
+		return m.compareErr
 	}
 	c := m.comparison
 	if c == nil {
-		return "No comparison loaded.\n\n" + helpStyle.Render("q/esc back · ctrl+c quit")
+		return "No comparison loaded."
 	}
 
 	var b strings.Builder
@@ -64,8 +66,6 @@ func renderCompare(m Model) string {
 	} else {
 		b.WriteString(renderTableau(m))
 	}
-
-	b.WriteString("\n" + helpStyle.Render(compareHelp(m)))
 	return b.String()
 }
 

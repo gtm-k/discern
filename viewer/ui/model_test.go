@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -108,6 +109,55 @@ func TestCompareRejectsMismatchedSidecar(t *testing.T) {
 	}
 	if mm.compareErr == "" {
 		t.Fatal("want compareErr set for id mismatch, got empty")
+	}
+}
+
+// TestCompareScrolls proves the observability contract survives a small terminal: a
+// run with more rows than the window height must keep its removed rows (sorted to the
+// bottom, with reason lines) REACHABLE by scrolling — not clipped off-screen.
+func TestCompareScrolls(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	items := []store.CompareItem{
+		{Product: "TopPick", Maker: "M", Status: "pick",
+			Scores: store.Scores{Fundamentals: f(0.9), ConsensusRaw: 3, ConsensusNorm: f(1), Evidence: 0.8, Clean: f(1)}},
+	}
+	for i := 0; i < 22; i++ {
+		items = append(items, store.CompareItem{Product: fmt.Sprintf("Eligible-%02d", i), Maker: "M", Status: "eligible",
+			Scores: store.Scores{Fundamentals: f(0.5), ConsensusRaw: 1, ConsensusNorm: f(0.5), Evidence: 0.5, Clean: f(1)}})
+	}
+	reason, rule := "contains banned material XYZZY", "no synthetics"
+	items = append(items, store.CompareItem{Product: "RemovedItem", Maker: "M", Status: "disqualified",
+		DisqualifiedReason: &reason, DealbreakerRule: &rule,
+		Scores: store.Scores{Fundamentals: f(0.4), ConsensusRaw: 1, Evidence: 0.5}})
+
+	c := &store.Comparison{
+		ID: "x", Need: "n", Axes: []string{"fundamentals", "consensus", "evidence", "clean"},
+		DealbreakerRules: []string{rule},
+		Counts:           store.Counts{Considered: len(items), Eligible: len(items) - 1, Removed: 1},
+		RadarDefault:     store.RadarDefault{Series: []string{"TopPick"}},
+		Items:            items,
+	}
+
+	m := New(exampleDir, nil).resize(48, 8) // small 8-row terminal
+	m.state = compareView
+	m.comparison = c
+	m.viewport.SetContent(renderCompare(m))
+	m.viewport.GotoTop()
+
+	if strings.Contains(m.View(), "RemovedItem") {
+		t.Fatal("precondition: removed row should be clipped in the initial small view")
+	}
+	// Page down as a user would; the removed row and its reason must become reachable.
+	var tm tea.Model = m
+	for i := 0; i < 25; i++ {
+		tm, _ = tm.(Model).Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	}
+	out := tm.(Model).View()
+	if !strings.Contains(out, "RemovedItem") {
+		t.Fatal("removed row must be reachable by scrolling (observability contract)")
+	}
+	if !strings.Contains(out, "XYZZY") {
+		t.Fatal("removed row's reason must be reachable by scrolling")
 	}
 }
 

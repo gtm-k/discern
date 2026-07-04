@@ -161,12 +161,17 @@ func (m Model) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateCompare handles keys in compareView: `r` toggle radar (only when the run
 // has >=2 radar series), `tab` cycle the rival series, `1`-`4` sort by axis, `enter`
-// open the full prose report for the same run, `q`/`esc` back to the list. None of
-// these panic on a degenerate comparison (no pick / no eligible rivals).
+// open the full prose report for the same run, `q`/`esc` back to the list. Any other
+// key (↑/↓, pgup/pgdn, home/end, j/k) SCROLLS the content through the viewport, so
+// removed rows sorted to the bottom of a large run stay reachable. State-changing keys
+// re-render the viewport content. None panic on a degenerate comparison.
 func (m Model) updateCompare(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return m, nil
+		// Non-key messages (e.g. mouse wheel) drive the viewport scroll.
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
 	}
 	switch key.String() {
 	case "ctrl+c":
@@ -182,20 +187,27 @@ func (m Model) updateCompare(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "r":
 		if m.comparison != nil && len(m.comparison.RadarDefault.Series) >= 2 {
 			m.radarOn = !m.radarOn
+			m.viewport.SetContent(renderCompare(m))
+			m.viewport.GotoTop()
 		}
 		return m, nil
 	case "tab":
 		if m.comparison != nil {
 			if n := len(eligibleRivals(m.comparison)); n > 0 {
 				m.rivalIdx = (m.rivalIdx + 1) % n
+				m.viewport.SetContent(renderCompare(m))
 			}
 		}
 		return m, nil
 	case "1", "2", "3", "4":
 		m.sortCol = int(key.String()[0] - '0')
+		m.viewport.SetContent(renderCompare(m))
 		return m, nil
 	}
-	return m, nil
+	// Everything else scrolls the content (keeps bottom-sorted removed rows reachable).
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
 }
 
 func (m Model) updateFilter(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -291,6 +303,10 @@ func (m Model) openCompare() (tea.Model, tea.Cmd) {
 	}
 	m.comparison = c
 	m.rivalIdx = defaultRivalIdx(c)
+	// Render into the (scrollable) viewport so a run with more rows than the terminal
+	// height keeps its removed rows reachable rather than clipped off-screen.
+	m.viewport.SetContent(renderCompare(m))
+	m.viewport.GotoTop()
 	return m, nil
 }
 
@@ -318,7 +334,11 @@ func (m Model) View() string {
 		return m.filter.View() + "\n" + m.table.View() + "\n" +
 			helpStyle.Render("type to filter · enter/esc apply · ctrl+c quit")
 	case compareView:
-		return renderCompare(m)
+		if m.comparison == nil {
+			// Error / missing / mismatch — a short message; no scrolling needed.
+			return renderCompare(m) + "\n" + helpStyle.Render("q/esc back · ctrl+c quit")
+		}
+		return m.viewport.View() + "\n" + helpStyle.Render(compareHelp(m))
 	default: // listView
 		return m.table.View() + "\n" +
 			helpStyle.Render("↑/↓ move · enter detail · c compare · / filter · q quit")
