@@ -44,6 +44,27 @@ never as a crutch:
 - **No access → say so.** If no tier is usable, or budgets are exhausted before any credible evidence, emit
   `INSUFFICIENT_EVIDENCE` / `reason_code=INSUFFICIENT_ACCESS` — never a fabricated pick.
 
+## Setup — before the method (profile bootstrap + version check)
+
+Do this **once at the start of every run**, before step 1 (Frame):
+
+1. **Ensure the active profile exists.** The active profile is `profiles/self.md` (buying for yourself) or
+   `profiles/recipients/<name>.md` (a gift). If the needed profile is **missing** — e.g. a fresh install —
+   do **not** fail or run profile-less:
+   - Offer a **short conversational setup**: ask what *value* means to them (their value framework), rough
+     budgets for the categories they care about, any hard filters (materials / origin / repairability), and
+     any gift defaults. Write the answers to `profiles/self.md` using `profiles/self.example.md` as the shape
+     (Discern reads the fenced `json` block; keep it schema-valid per `schemas/profile.schema.json`). Show the
+     result and confirm before continuing.
+   - If they'd rather skip the interview now, copy `profiles/self.example.md` → `profiles/self.md` and tell
+     them it's a generic starting point to edit later. Proceed with it.
+   - `profiles/self.md` and real recipient profiles are git-ignored (private); only `*.example.md` ship.
+2. **Check the profile version.** Read the profile's `schema_version` and compare it to the current version
+   in `profiles/MIGRATIONS.md`. If the profile is **behind**, summarize what changed (from that file) and
+   offer to migrate it in place before running. Never silently run a stale profile.
+
+Only once Setup completes, proceed to the steps below.
+
 ## The steps
 
 ### 1. Frame

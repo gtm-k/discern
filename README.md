@@ -122,13 +122,15 @@ cd viewer && go build -o discern-view . && cd ..
 # 3) See it immediately on the bundled example run
 viewer/discern-view --store store/example  # ↑/↓ navigate · Enter compare grid (Enter again: report) · / filter · q quit
 
-# 4) Run a real recommendation — the engine is an agent *skill*, not a CLI binary. Open this repo in your
-#    AI coding agent (e.g. Claude Code) and prompt it:
-#    "Follow skills/discern/SKILL.md to recommend <need> for me (profiles/self.md)."
+# 4) Run a real recommendation — Discern is an agent *skill*, not a CLI binary, and it's AI-agnostic.
+#    Open this repo in any AI coding agent (Claude Code, Cursor, Codex, Gemini CLI, ...); it reads AGENTS.md
+#    automatically, so just ask in plain language:
+#    "Find me the best noise-cancelling headphones under $300."
 ```
 
-> Set up your private profile first: `cp profiles/self.example.md profiles/self.md` and edit it.
-> Real profiles and live run history are git-ignored; only `*.example.md` and `store/example/` ship.
+> **First run sets up your private profile by chatting** — or copy `profiles/self.example.md` →
+> `profiles/self.md` and edit it. Real profiles and live run history are git-ignored; only `*.example.md`
+> and `store/example/` ship.
 
 ## Example output
 
@@ -213,7 +215,8 @@ See [`docs/store.md`](docs/store.md) for the layout, id scheme, and index contra
 
 | Path | What |
 |------|------|
-| `skills/discern/SKILL.md` | The buying method — the portable skill |
+| `AGENTS.md` (+ `CLAUDE.md`·`CODEX.md`·`GEMINI.md`·`OPENCODE.md`) | AI-agnostic entry point — any agent reads these and triggers Discern on buying intent |
+| `skills/discern/SKILL.md` | The buying method — the portable skill (mirrored to `.claude/skills/`·`.agents/skills/` for native discovery) |
 | `schemas/` | Recommendation Object · Preference Profile · subagent-output · store-index JSON Schemas (the contracts) |
 | `docs/` | `triage`, `definitions`, `data-access`, `render`, `category-widening`, `live-smoke`, `store` — the normative specs |
 | `tools/` | Node ESM: `validate`, `cluster`, `grid`, `decision`, `render`, `compare`, `coverage`, `orchestration`, `category-gate`, `store` |
