@@ -1470,6 +1470,26 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   expect("compare: degenerate fabricates no pick", !!scmp && !scmp.items.some((it) => it.status === "pick"),
     `a pick status was fabricated`);
 
+  // Fail-closed on non-unique product display names (Codex review, high): the join keys on `product`
+  // and a shortlist item has no maker to disambiguate, so a duplicate would mis-attribute scores or
+  // emit two picks. buildComparison must REFUSE rather than launder an ambiguous comparison.
+  const dupCandidate = {
+    ...crafted,
+    candidates: [crafted.candidates[0], { ...crafted.candidates[2], product: "PickW" }], // two "PickW" candidates
+    shortlist: [crafted.shortlist[0]],
+    runners_up: [],
+  };
+  let dupCandThrew = false;
+  try { buildComparison(dupCandidate); } catch { dupCandThrew = true; }
+  expect("compare: fail-closed on duplicate candidate product", dupCandThrew,
+    "buildComparison did not throw on two candidates sharing a product name");
+
+  const dupShortlist = { ...crafted, shortlist: [crafted.shortlist[0], { ...crafted.shortlist[0] }] };
+  let dupShortThrew = false;
+  try { buildComparison(dupShortlist); } catch { dupShortThrew = true; }
+  expect("compare: fail-closed on duplicate shortlist product", dupShortThrew,
+    "buildComparison did not throw on two shortlist items sharing a product name");
+
   // Sidecar schema-validity: buildComparison output validates against store-compare.schema.json for every golden.
   for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient", "safety-supplement"]) {
     const out = buildComparison(load(`evals/golden/${name}.json`));

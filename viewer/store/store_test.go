@@ -1,8 +1,10 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -163,6 +165,54 @@ func TestLoadComparisonRejectsSymlink(t *testing.T) {
 	got, err := LoadComparison(store, filepath.Join("runs", "ok.compare.json"))
 	if err != nil || got == nil || got.ID != "ok" {
 		t.Fatalf("safe in-store path: want id=ok+nil err, got %v err=%v", got, err)
+	}
+}
+
+// TestLoadComparisonRejectsInvalid verifies LoadComparison fails closed on a sidecar
+// that parses as JSON but breaks the store-compare contract. The sidecar is the seam
+// contract and a shared/hand-edited store is untrusted, so an unknown field or a broken
+// invariant must error rather than render a plausible-but-false comparison (Codex review).
+func TestLoadComparisonRejectsInvalid(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, "runs")
+	if err := os.MkdirAll(runs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) string {
+		if err := os.WriteFile(filepath.Join(runs, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return filepath.Join("runs", name)
+	}
+
+	base := `{"id":"x","need":"n","axes":["fundamentals","consensus","evidence","clean"],` +
+		`"dealbreaker_rules":[],"counts":{"considered":1,"eligible":1,"removed":0},` +
+		`"radar_default":{"series":["A"]},` +
+		`"items":[{"product":"A","maker":"M","status":"pick","disqualified_reason":null,` +
+		`"dealbreaker_rule":null,"durable_unresolved":false,` +
+		`"scores":{"fundamentals":0.5,"consensus_raw":1,"consensus_norm":1,"evidence":0.5,"clean":1}}]}`
+
+	// The base document is valid and loads.
+	if got, err := LoadComparison(dir, write("ok.compare.json", base)); err != nil || got == nil {
+		t.Fatalf("valid sidecar: want load, got %v err=%v", got, err)
+	}
+
+	// Each mutation breaks exactly one invariant and must fail closed (error + nil).
+	cases := map[string]string{
+		"unknown field":       strings.Replace(base, `"items":[`, `"bogus":1,"items":[`, 1),
+		"bad status":          strings.Replace(base, `"status":"pick"`, `"status":"nope"`, 1),
+		"inconsistent counts":  strings.Replace(base, `"considered":1`, `"considered":2`, 1),
+		"wrong axes":          strings.Replace(base, `,"consensus","evidence","clean"]`, `,"consensus","evidence"]`, 1),
+		"oversized radar":     strings.Replace(base, `"series":["A"]`, `"series":["A","A","A"]`, 1),
+		"dangling radar":      strings.Replace(base, `"series":["A"]`, `"series":["ZZZ"]`, 1),
+	}
+	i := 0
+	for name, body := range cases {
+		i++
+		rel := write(fmt.Sprintf("bad%d.compare.json", i), body)
+		if got, err := LoadComparison(dir, rel); err == nil || got != nil {
+			t.Fatalf("%s: want error+nil comparison, got %v err=%v", name, got, err)
+		}
 	}
 }
 

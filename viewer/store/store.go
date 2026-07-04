@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,11 +129,78 @@ func LoadComparison(dir, compareRel string) (*Comparison, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read comparison %q: %w", compareRel, err)
 	}
+	// Strict decode: the sidecar is the seam contract and a shared/hand-edited store is
+	// untrusted (parity with the path guards above), so reject unknown fields and then
+	// enforce the contract invariants JSON alone can't — a malformed comparison must fail
+	// closed rather than render a false completeness line or invalid statuses.
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
 	var c Comparison
-	if err := json.Unmarshal(b, &c); err != nil {
+	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("parse comparison %q: %w", compareRel, err)
 	}
+	if err := c.validate(); err != nil {
+		return nil, fmt.Errorf("invalid comparison %q: %w", compareRel, err)
+	}
 	return &c, nil
+}
+
+// compareAxes is the canonical axis order every sidecar must carry (mirrors
+// tools/compare.mjs AXES and schemas/store-compare.schema.json).
+var compareAxes = [...]string{"fundamentals", "consensus", "evidence", "clean"}
+
+// validStatus is the closed set of item statuses (mirrors the schema enum).
+var validStatus = map[string]bool{
+	"pick": true, "runner_up": true, "eligible": true, "not_shortlisted": true, "disqualified": true,
+}
+
+// validate enforces the store-compare contract invariants that decoding alone cannot:
+// the fixed axes, the status enum, count consistency (considered == items, removed ==
+// disqualified, eligible == considered-removed), and a radar overlaying at most two series
+// that each name a real item. Returns an error (fail closed) on any breach, so a hand-edited
+// or version-skewed sidecar surfaces as an error instead of a plausible-but-false comparison.
+func (c *Comparison) validate() error {
+	if len(c.Axes) != len(compareAxes) {
+		return fmt.Errorf("axes: want %v, got %v", compareAxes, c.Axes)
+	}
+	for i, a := range compareAxes {
+		if c.Axes[i] != a {
+			return fmt.Errorf("axes[%d]: want %q, got %q", i, a, c.Axes[i])
+		}
+	}
+	products := make(map[string]bool, len(c.Items))
+	removed := 0
+	for i, it := range c.Items {
+		if it.Product == "" {
+			return fmt.Errorf("items[%d]: empty product", i)
+		}
+		if !validStatus[it.Status] {
+			return fmt.Errorf("items[%d] %q: invalid status %q", i, it.Product, it.Status)
+		}
+		if it.Status == "disqualified" {
+			removed++
+		}
+		products[it.Product] = true
+	}
+	if c.Counts.Considered != len(c.Items) {
+		return fmt.Errorf("counts.considered=%d but %d items", c.Counts.Considered, len(c.Items))
+	}
+	if c.Counts.Removed != removed {
+		return fmt.Errorf("counts.removed=%d but %d disqualified items", c.Counts.Removed, removed)
+	}
+	if c.Counts.Eligible != c.Counts.Considered-c.Counts.Removed {
+		return fmt.Errorf("counts not additive: considered=%d eligible=%d removed=%d",
+			c.Counts.Considered, c.Counts.Eligible, c.Counts.Removed)
+	}
+	if len(c.RadarDefault.Series) > 2 {
+		return fmt.Errorf("radar_default.series: at most 2, got %d", len(c.RadarDefault.Series))
+	}
+	for _, s := range c.RadarDefault.Series {
+		if !products[s] {
+			return fmt.Errorf("radar_default.series references unknown product %q", s)
+		}
+	}
+	return nil
 }
 
 // containedPath validates that rel is a store-relative path staying within dir —

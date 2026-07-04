@@ -15,6 +15,25 @@ import { isDisqualified, disqualifyReason } from "./disqualify.mjs";
 /** A valid record element: a plain object, not null and not an array. Filters untrusted input. */
 const isRecord = (o) => !!o && typeof o === "object" && !Array.isArray(o);
 
+/**
+ * Fail closed on non-unique product display names. The comparison join model keys on `product`
+ * (a shortlist_item carries no maker to disambiguate), so a duplicate would silently mis-attribute
+ * fundamentals/clean or emit two picks from one recorded pick. Refuse to build rather than launder
+ * an ambiguous comparison — consistent with the store's "refuse a malformed object" posture.
+ */
+function assertUniqueProducts(items, label) {
+  const seen = new Set();
+  for (const it of items) {
+    const p = typeof it.product === "string" ? it.product : "";
+    if (seen.has(p)) {
+      throw new Error(
+        `compare: refusing to build — non-unique ${label} product ${JSON.stringify(p)} cannot be joined unambiguously`
+      );
+    }
+    seen.add(p);
+  }
+}
+
 /** The four fixed comparison axes (Phase 1 evidence-quality aggregates). Constant across every run. */
 export const AXES = ["fundamentals", "consensus", "evidence", "clean"];
 
@@ -98,6 +117,10 @@ export function buildComparison(rec) {
   const r = isRecord(rec) ? rec : {};
   const candidates = (Array.isArray(r.candidates) ? r.candidates : []).filter(isRecord);
   const shortlist = (Array.isArray(r.shortlist) ? r.shortlist : []).filter(isRecord);
+  // Fail closed BEFORE any joining if product display names collide (Codex review, high) — the
+  // join keys on `product` and, with no maker on a shortlist item, cannot disambiguate duplicates.
+  assertUniqueProducts(candidates, "candidate");
+  assertUniqueProducts(shortlist, "shortlist");
   const shortByProduct = new Map(shortlist.map((s) => [s.product, s]));
 
   const need = typeof r.framed_requirements?.need === "string" ? r.framed_requirements.need : "";
