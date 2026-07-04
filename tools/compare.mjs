@@ -121,6 +121,23 @@ export function buildComparison(rec) {
   // join keys on `product` and, with no maker on a shortlist item, cannot disambiguate duplicates.
   assertUniqueProducts(candidates, "candidate");
   assertUniqueProducts(shortlist, "shortlist");
+
+  // Fail closed on dangling cross-references (Codex review, high): the rec schema does not
+  // enforce that shortlist / pick / runners_up products resolve to a candidate, but the
+  // comparison is built by iterating candidates — a dangling reference would silently drop the
+  // recorded pick or mislabel rows. Refuse rather than ship a panel that contradicts the record.
+  const candidateProducts = new Set(candidates.map((c) => (typeof c.product === "string" ? c.product : "")));
+  const requireCandidate = (product, label) => {
+    if (!candidateProducts.has(product)) {
+      throw new Error(`compare: refusing to build — ${label} product ${JSON.stringify(product)} is not among the candidates`);
+    }
+  };
+  for (const s of shortlist) requireCandidate(typeof s.product === "string" ? s.product : "", "shortlist");
+  if (isRecord(r.pick)) requireCandidate(typeof r.pick.product === "string" ? r.pick.product : "", "pick");
+  for (const ru of Array.isArray(r.runners_up) ? r.runners_up : []) {
+    if (isRecord(ru)) requireCandidate(typeof ru.product === "string" ? ru.product : "", "runner-up");
+  }
+
   const shortByProduct = new Map(shortlist.map((s) => [s.product, s]));
 
   const need = typeof r.framed_requirements?.need === "string" ? r.framed_requirements.need : "";

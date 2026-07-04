@@ -1490,6 +1490,30 @@ expect("store-index schema loads + is array", (()=>{const s=load("schemas/store-
   expect("compare: fail-closed on duplicate shortlist product", dupShortThrew,
     "buildComparison did not throw on two shortlist items sharing a product name");
 
+  // Fail-closed on dangling cross-references (Codex review, high): a shortlist/pick/runner-up
+  // product that does not resolve to a candidate would drop the recorded pick or mislabel rows.
+  const danglingPick = { ...crafted, pick: { product: "GhostW", maker: "M9" } };
+  let dpThrew = false;
+  try { buildComparison(danglingPick); } catch { dpThrew = true; }
+  expect("compare: fail-closed on dangling pick", dpThrew,
+    "buildComparison did not throw on a pick not among the candidates");
+
+  const danglingRunner = { ...crafted, runners_up: [{ product: "GhostR", maker: "M8" }] };
+  let drThrew = false;
+  try { buildComparison(danglingRunner); } catch { drThrew = true; }
+  expect("compare: fail-closed on dangling runner-up", drThrew,
+    "buildComparison did not throw on a runner-up not among the candidates");
+
+  const danglingShortlist = {
+    ...crafted,
+    shortlist: [...crafted.shortlist,
+      { product: "GhostS", fundamentals_card: { summary: "s", fundamentals_score: 0.5, fundamentals: [{ dimension: "d", finding: "f" }] }, counterevidence: [] }],
+  };
+  let dslThrew = false;
+  try { buildComparison(danglingShortlist); } catch { dslThrew = true; }
+  expect("compare: fail-closed on dangling shortlist product", dslThrew,
+    "buildComparison did not throw on a shortlist product not among the candidates");
+
   // Sidecar schema-validity: buildComparison output validates against store-compare.schema.json for every golden.
   for (const name of ["electronics-headphones", "clothing-natural-materials", "gift-recipient", "safety-supplement"]) {
     const out = buildComparison(load(`evals/golden/${name}.json`));
